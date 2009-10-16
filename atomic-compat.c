@@ -1,15 +1,14 @@
 /*
- *  atomics.c
- *  stmtest
+ *  atomic-compat.c
+ *  stmmap
  *
  *  Created by Shel Kaphan on 10/8/09.
- *  Copyright 2009 __MyCompanyName__. All rights reserved.
  *
  */
 
 
 
-#include "atomics.h"
+#include "atomic-compat.h"
 
 
 

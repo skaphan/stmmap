@@ -1,9 +1,8 @@
 /*
  *  stm.c
- *  stmtest
+ *  stmmap
  *
  *  Created by Shel Kaphan on 9/18/09.
- *  Copyright 2009 __MyCompanyName__. All rights reserved.
  *
  */
 
@@ -15,7 +14,7 @@
 #include <string.h>
 #include <unistd.h>			// absolutely need this for pwrite().  (Just spent an hour chasing this...)
 
-#include "atomics.h"
+#include "atomic-compat.h"
 #include "stm.h"
 
 

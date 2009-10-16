@@ -1,9 +1,8 @@
 /*
  *  stmalloc.c
- *  stmtest
+ *  stmmap
  *
  *  Created by Shel Kaphan on 9/20/09.
- *  Copyright 2009 __MyCompanyName__. All rights reserved.
  *
  */
 
