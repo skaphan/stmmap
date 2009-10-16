@@ -4,6 +4,10 @@
  *
  *  Created by Shel Kaphan on 10/8/09.
  *
+ *  This file will have to be ported to work with atomic primitives as supplied
+ *  by different operating system versions.   This was originally coded to work
+ *  with MacOS 10.6.
+ *
  */
 
 

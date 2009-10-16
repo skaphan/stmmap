@@ -1,0 +1,71 @@
+
+
+The purpose of this package is to provide something akin to "Software Transactional Memory" functionality in C and C++,
+without requiring much extra complexity for the programmer.	
+
+It is built on top of file-mapping -- in particular Unix's mmap() system call.
+One or more shared memory areas are opened by each process that uses this package.
+When no transaction is in progress, each shared area is visible to any processes that access that shared,
+mapped file through the stm package.
+
+When a transaction is in progress, the shared area is access-protected, and all accesses are trapped.
+A signal handler keeps track of the accessed pages.  Each accessed
+page is then mapped "private" on first access so that our modifications are not visible to any other process.  On commit,
+we attempt to establish ownership of all modified pages and then write those pages back to the shared file.
+This is "optimistic locking" in that the modified pages are only locked at the end of the transaction, during the commit
+process.  Though this system works using mapped files, no I/O needs to occur normally -- the writes just affect the mapped file's
+memory buffers.  At this time, we check to see if any other processes have modified the pages we have accessed during
+the transaction, by means of a transaction ID associated with each page.  If they have, our transaction is aborted and all
+changes discarded.
+
+This mechanism provides read consistency in that if our transaction succeeds, we guarantee that no other transaction will
+have modified the pages while our transaction was in progress.  However, we do not guarantee the transaction will succeed.
+Transactions that are automatically aborted are also automatically retried, with a backoff mechanism, until they succeed.
+
+Accesses not during transactions are "real time" and there is no guarantee of consistency.
+The access control on shared segments not during transactions can be specified for each shared segment.
+
+Transactions are composable -- that is, they can be nested.  This is so that complex transactions can be built up
+out of simpler ones.
+
+Processes can have a number of shared memory areas, limited by the number of file descriptors and virtual memory available.
+
+This package works at the process level, not at the thread level.  If you are looking for a multi-threaded approach, this is not for
+you.  However, it does work using arbitrarily large shared memory areas between processes, limited by the amount of virtual
+address space available.   Each process can map the shared segment to a known virtual location, so arbitrary data structures
+can exist in the shared area.  They just should not refer outside the shared area to objects that only exist in the private
+parts of each process's address space.
+
+It is arguable that it is better for threads of execution (processes, in this case) to share only the data structure they
+*intend* to share, not everything in the address space, that they only accidentally share.  That is the philosophy of this
+package.  To use this technical approach followed by this package, it is also the only possibility, at least so long as threads
+do not have their own memory maps!
+
+Another limitation of this package is that it operates on the OS page level.  That is, only one process can write to a page
+during a transaction, and any other process's transaction that accesses the same page will have to be aborted and retried.
+This may not be as bad as it sounds if you code your transactions to be relatively short.  The arbitration between processes
+seeking to own a page during a transaction is on a first-come first-served basis.  Since pages are always locked in
+order of virtual address, there can be no deadlock.  As soon as a transaction tries to obtain a page that has been modified
+by another process's transaction, it aborts.
+
+Another restriction is that this package will only work on systems where the contents of shared, mapped files are immediately
+visible to all processes that have them mapped shared.  This could possibly fail on some systems without sufficient cache
+coherency, for example.  This package does *not* depend on private mappings being kept up to date with the current contents
+of a file.  It does depend on private pages not being visible to other processes, and it uses "copy-on-write" semantics
+of private mapping to ensure that private pages are private and will not be arbirarily overwritten with data from another
+process.
+
+Warning: since transactions will be retried until they succeed, any variables outside the explicitly shared memory segment(s)
+that are referenced within a transaction must be handled with care.  In particular, you should not access anything that you
+later modify in the same transaction.  If the transaction is retried, the earlier reference will pick up the value set in an earlier
+try. You can set and then use a variable in the same transaction, but you can't use a variable and then set it to a new value
+and expect that to work right if retries are necessary.  Only information in the shared segments is managed transactionally.
+
+To use this package you only need to link in the compiled versions of stm.c and atomic-compat.c.  All visible APIs are
+exposed through stm.h.
+
+There is also a memory allocator for your shared segments.  For this, you need to include the compiled versions of
+AVLtree.c, stmalloc.c, and stmalloc-internal.c.   The visible API is in stmalloc.h.
+
+
+

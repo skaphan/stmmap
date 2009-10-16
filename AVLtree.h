@@ -4,6 +4,8 @@
  *
  *  Created by Shel Kaphan on 9/21/09.
  *
+ *  Implements AVL trees, a form of balanced binary trees.
+ *
  */
 
 
@@ -27,6 +29,13 @@ void AVLaddToTree(AVLtreeNode* i, AVLtreeNode** tree, int (*cmp)(void*,void*), v
  */ 
 void AVLremoveFromTree(AVLtreeNode* t, AVLtreeNode** tree);
 
+/*
+ Search for a node in the tree using a user supplied comparison function, and key extractor.
+ */
 AVLtreeNode* AVLsearch(AVLtreeNode* t, void* key, int (*cmp)(void*,void*), void* (*getKey)(void*));
 
+/* 
+ For "subtypes" of AVLtreeNode, there's a hook which, if set, is called on each node when the
+ node's depth is being calculated.
+ */
 extern void (*AVLuserHook)(AVLtreeNode*);

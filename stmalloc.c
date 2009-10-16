@@ -8,8 +8,9 @@
 
 #include <stdio.h>
 
+
 #include "stm.h"
-#include "stmalloc-internal.h"
+#include "segalloc.h"
 #include "stmalloc.h"
 
 

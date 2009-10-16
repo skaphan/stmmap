@@ -92,7 +92,7 @@ typedef struct shared_segment {
 	int n_prior_active_transactions;
 	transaction_id_t prior_active_transactions[MAX_ACTIVE_TRANSACTIONS];
 	
-	struct stmalloc_node **free_list_addr;
+	struct segalloc_node **free_list_addr;
 } shared_segment;
 
 
@@ -427,7 +427,7 @@ static void abort_transaction_on_segment(shared_segment *seg) {
 
 
 
-int stm_transaction_stack_empty() {
+int _stm_transaction_stack_empty() {
 	return (transaction_stack == NULL);
 }
 
@@ -570,11 +570,11 @@ shared_segment *stm_find_shared_segment(void *va) {
 	return NULL;
 }
 
-struct stmalloc_node **stm_free_list_addr(shared_segment *seg) {
+struct segalloc_node **stm_free_list_addr(shared_segment *seg) {
 	return seg->free_list_addr;
 }
 
-void stm_set_free_list_addr(shared_segment *seg, struct stmalloc_node **free_list_addr) {
+void stm_set_free_list_addr(shared_segment *seg, struct segalloc_node **free_list_addr) {
 	seg->free_list_addr = free_list_addr;
 }
 
