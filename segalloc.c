@@ -84,7 +84,7 @@ static size_t least_power_of_2_ge (size_t size) {
 	return remaining_bits;
 }
 
-size_t block_size_for (size_t size) {	
+size_t seg_block_size_for (size_t size) {	
 	static size_t t = 0;
 	
 	if (t == 0) t = least_power_of_2_ge(sizeof(segalloc_node));
@@ -208,7 +208,7 @@ void *seg_alloc(size_t size, segalloc_node **free_list) {
 	AVLtreeNode* result;
 	size_t real_size;
 	
-	result = segalloc_search((AVLtreeNode*)*free_list, block_size_for(size), free_list);
+	result = segalloc_search((AVLtreeNode*)*free_list, seg_block_size_for(size), free_list);
 	if (result) {
 		real_size = ((segalloc_node *)result)->size;
 		AVLremoveFromTree(result, (AVLtreeNode**)free_list);
@@ -283,7 +283,7 @@ static int nodes_overlap_cmp(void* a, void* b) {
 void seg_free(void *object_va, size_t size, void *base_va, segalloc_node **free_list) {
 	size_t block_size;
 		
-	block_size = block_size_for(size);
+	block_size = seg_block_size_for(size);
 	
 	if (AVLsearch((AVLtreeNode*)*free_list, (AVLtreeNode*)object_va, nodes_overlap_cmp, nodekey) != NULL) {
 		fprintf(stderr, "seg_free: node 0x%lx already in free list!\n", (unsigned long)object_va);
@@ -336,7 +336,7 @@ segalloc_node **seg_alloc_init(void *base_va, size_t size, int mode) {
 	return (segalloc_node **)base_va;
 }
 
-static int __verify_tree_integrity(AVLtreeNode *tt, AVLtreeNode* parent, void* lower_bound, void* upper_bound) {
+static int verify_tree_integrity(AVLtreeNode *tt, AVLtreeNode* parent, void* lower_bound, void* upper_bound) {
 	
 	segalloc_node *t;
 	size_t size_mask;
@@ -404,16 +404,16 @@ static int __verify_tree_integrity(AVLtreeNode *tt, AVLtreeNode* parent, void* l
 						
 						
 	if (tt->left)
-		result += __verify_tree_integrity(tt->left, tt, lower_bound, tt);
+		result += verify_tree_integrity(tt->left, tt, lower_bound, tt);
 	
 	if (tt->right)
-		result += __verify_tree_integrity(tt->right, tt, (void*)t + t->size, upper_bound);
+		result += verify_tree_integrity(tt->right, tt, (void*)t + t->size, upper_bound);
 	
 	return result;
 }
 
-int verify_tree_integrity(segalloc_node *free_list) {
-	return __verify_tree_integrity((AVLtreeNode*)free_list, NULL, NULL, NULL);
+int seg_verify_tree_integrity(segalloc_node *free_list) {
+	return verify_tree_integrity((AVLtreeNode*)free_list, NULL, NULL, NULL);
 }
 
 	

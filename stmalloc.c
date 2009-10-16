@@ -14,16 +14,16 @@
 #include "stmalloc.h"
 
 
-void alloc_init(struct shared_segment *seg, int mode) {
+void stm_alloc_init(struct shared_segment *seg, int mode) {
 	stm_start_transaction("alloc.init");
 	
-	stm_set_free_list_addr(seg, stm_alloc_init(stm_segment_base(seg), stm_segment_size(seg), mode));
+	stm_set_free_list_addr(seg, seg_alloc_init(stm_segment_base(seg), stm_segment_size(seg), mode));
 	
 	stm_commit_transaction("alloc.init");
 	
 }
 
-void alloc_free(void *va) {
+void stm_free(void *va) {
 	struct shared_segment *seg;
 	size_t size;
 	
@@ -36,9 +36,9 @@ void alloc_free(void *va) {
 	stm_commit_transaction("alloc.free");
 }
 
-void *alloc_new(struct shared_segment *seg, size_t size) {
+void *stm_alloc(struct shared_segment *seg, size_t size) {
 	void *result;
-	size_t real_size = block_size_for(size + sizeof(size_t));
+	size_t real_size = seg_block_size_for(size + sizeof(size_t));
 	
 	stm_start_transaction("alloc.new");	
 	result = stm_alloc(real_size, stm_free_list_addr(seg));
