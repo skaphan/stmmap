@@ -10,19 +10,19 @@ mapped file through the stm package.
 
 When a transaction is in progress, the shared area is access-protected, and all accesses are trapped.
 A signal handler keeps track of the accessed pages.  Each accessed
-page is then mapped "private" on first access so that our modifications are not visible to any other process.  On commit,
-we attempt to establish ownership of all modified pages and then write those pages back to the shared file.
+page is then mapped "private" on first access so that any modifications are not visible to any other process.  On commit,
+there is an attempt to establish ownership of all modified pages and then write those pages back to the shared file.
 This is "optimistic locking" in that the modified pages are only locked at the end of the transaction, during the commit
-process.  Though this system works using mapped files, no I/O needs to occur normally -- the writes just affect the mapped file's
-memory buffers.  At this time, we check to see if any other processes have modified the pages we have accessed during
-the transaction, by means of a transaction ID associated with each page.  If they have, our transaction is aborted and all
-changes discarded.
+process.  At this time, there is a check to see if any other processes have modified the pages that have been accessed during
+the transaction, by means of a transaction ID associated with each page.  If they have, the transaction is aborted and all
+changes discarded.  Though this system works using mapped files, no I/O needs to occur normally -- the writes just affect
+the mapped file's memory buffers.
 
-This mechanism provides read consistency in that if our transaction succeeds, we guarantee that no other transaction will
-have modified the pages while our transaction was in progress.  However, we do not guarantee the transaction will succeed.
+This mechanism provides read consistency in that if a transaction succeeds, it is guaranteed that no other transaction will
+have modified the pages accessed by the first transaction.  However, there is no guarantee the transaction will succeed.
 Transactions that are automatically aborted are also automatically retried, with a backoff mechanism, until they succeed.
 
-Accesses not during transactions are "real time" and there is no guarantee of consistency.
+Accesses to shared segments not during transactions are "real time" and there is no guarantee of consistency.
 The access control on shared segments not during transactions can be specified for each shared segment.
 
 Transactions are composable -- that is, they can be nested.  This is so that complex transactions can be built up
