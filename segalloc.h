@@ -34,7 +34,7 @@ struct segalloc_node;
 struct segalloc_node **seg_alloc_init(void *base_va, size_t size, int mode);
 
 void *seg_alloc(size_t size, struct segalloc_node **free_list);
-	
+    
 void seg_free(void *object_va, size_t size, void *base_va, struct segalloc_node **free_list);
 
 size_t seg_block_size_for(size_t size);

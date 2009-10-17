@@ -26,10 +26,10 @@
 
 typedef struct AVLtreeNode
 { 
-	struct AVLtreeNode* parent;
-	struct AVLtreeNode* left;
-	struct AVLtreeNode* right;
-	int depth;
+    struct AVLtreeNode* parent;
+    struct AVLtreeNode* left;
+    struct AVLtreeNode* right;
+    int depth;
 } AVLtreeNode;
 
 

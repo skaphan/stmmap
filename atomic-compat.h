@@ -39,7 +39,7 @@ int32_t atomic_increment_32(int32_t *addr);
 
 int32_t atomic_decrement_32(int32_t *addr);
 
-int32_t	atomic_compare_and_swap_32(int32_t oldval, int32_t newval, int32_t *addr);
+int32_t atomic_compare_and_swap_32(int32_t oldval, int32_t newval, int32_t *addr);
 
 
 

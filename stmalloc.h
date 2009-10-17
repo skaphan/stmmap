@@ -32,9 +32,9 @@ struct shared_segment;
  been opened with stm_open_shared_segment().  
  
  Args:
- seg	shared_segment that was returned by stm_open_shared_segment().
- mode	0 = use existing free-list in segment
-		1 = initialize free-list  (you have to know, somehow, that your process is the first to access the shared_segment
+ seg    shared_segment that was returned by stm_open_shared_segment().
+ mode   0 = use existing free-list in segment
+        1 = initialize free-list  (you have to know, somehow, that your process is the first to access the shared_segment
  */
 void stm_alloc_init(struct shared_segment *seg, int mode);
 
