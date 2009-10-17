@@ -113,7 +113,7 @@ To use this package you only need to link in the compiled versions of stm.c and
 atomic-compat.c.  All visible APIs are exposed through stm.h.
 
 There is also a memory allocator for your shared segments.  For this, you need
-to include the compiled versions of AVLtree.c, stmalloc.c, and stmalloc-internal.c.
+to include the compiled versions of AVLtree.c, stmalloc.c, and segalloc.c.
 The visible API is in stmalloc.h.
 
 Shel Kaphan, Oct. 17, 2009
