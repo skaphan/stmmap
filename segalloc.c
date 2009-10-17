@@ -39,10 +39,6 @@ typedef struct segalloc_node {
 } segalloc_node;
 
 
-
-#define MAX_BLOCK_SIZE 0x10000000
-
-
 static void set_size_mask(AVLtreeNode *a) {
     segalloc_node *l, *r;
     segalloc_node *n = (segalloc_node *)a;
