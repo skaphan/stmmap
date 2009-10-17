@@ -69,8 +69,8 @@ int stm_init(int verbose);
  size			Length in bytes of the shared segment you need.  File will be grown if it is not this large already.
  requested_va	If NULL, the shared segment will be allocated at will.  If specified, the address where you would
 				like your shared segment.
- prot_flags		Either PROT_NONE, or one or the binary OR of PROT_READ and PROT_WRITE.  Controls access to shared 
-				segment between transactions.
+ prot_flags		Either PROT_NONE, or the binary OR of PROT_READ and PROT_WRITE (or just one of them).
+				Controls access to shared segment between transactions.
  
  Return value:
  NULL			failure; stm_error contains error code.
@@ -226,7 +226,7 @@ void stm_set_free_list_addr(struct shared_segment *seg, struct segalloc_node **f
 
 
 /*
- These are really a private functions so do not call them directly.  They have to be exposed for use by the
+ These are really private functions so do not call them directly.  They have to be exposed for use by the
  above macro.
  */
 int _stm_transaction_stack_empty();
