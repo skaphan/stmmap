@@ -4,7 +4,7 @@
  
  This is a compatibility package for whatever OS-supplied atomic operators are to be found on your
  platform.  It was originally implemented using MAC OS X  so the API is very similar to that.
- This file and atomics.c can be conditionalized to support additional OS versions.
+ This file and atomic-compat.h can be conditionalized to support additional OS versions.
  
  Copyright 2009 Shel Kaphan
  
