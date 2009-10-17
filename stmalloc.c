@@ -46,7 +46,7 @@ void stm_free(void *va) {
 	seg = stm_find_shared_segment(va);
 	if (seg) {
 		size = *(((size_t*)va)-1);
-		stm_free(va - sizeof(size_t), size, stm_segment_base(seg), stm_free_list_addr(seg));
+		seg_free(va - sizeof(size_t), size, stm_segment_base(seg), stm_free_list_addr(seg));
 	}
 	stm_commit_transaction("alloc.free");
 }
@@ -56,7 +56,7 @@ void *stm_alloc(struct shared_segment *seg, size_t size) {
 	size_t real_size = seg_block_size_for(size + sizeof(size_t));
 	
 	stm_start_transaction("alloc.new");	
-	result = stm_alloc(real_size, stm_free_list_addr(seg));
+	result = seg_alloc(real_size, stm_free_list_addr(seg));
 	if (result) {
 		*(size_t*)result = real_size;
 	} 
