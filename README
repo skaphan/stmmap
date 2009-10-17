@@ -95,7 +95,7 @@ sufficient cache coherency, for example.  This package does *not* depend on
 private mappings being kept up to date with the current contents of a file.
 It does depend on private pages not being visible to other processes, and it
 uses "copy-on-write" semantics of private mapping to ensure that private pages
-are private and will not be arbirarily overwritten with data from another
+are private and will not be arbitrarily overwritten with data from another
 process.
 
 Warning: since transactions will be retried until they succeed, any variables
