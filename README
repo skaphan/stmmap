@@ -29,29 +29,33 @@ complexity for the programmer.
 It is built on top of file-mapping -- in particular Unix's mmap() system call.
 One or more shared memory areas are opened by each process that uses this package.
 When no transaction is in progress, each shared area is visible to any processes
-that access that shared, mapped file through the stm package.
+that access that segment of mapped memory.
 
 When a transaction is in progress, the shared area is access-protected, and all
 accesses are trapped.  A signal handler keeps track of the accessed pages.
-Each accessed page is then mapped "private" on first access so that any
-modifications are not visible to any other process.  On commit, there is an
-attempt to establish ownership of all modified pages and then write those pages
-back to the shared file.  This is "optimistic locking" in that the modified pages
-are only locked at the end of the transaction, during the commit process.  At this
-time, there is a check to see if any other processes have modified the pages that
+Upon first access in a transaction, each accessed page is remapped "private" so that
+any modifications are not visible to any other process.  If, on first access to a page
+within a transaction, it can be determined that another process has modified that page,
+the transaction is aborted.  When a transaction is committed, there is an
+attempt to establish ownership of all modified pages and then re-map those private pages
+as shared.
+
+This package uses "optimistic locking" in that the modified pages
+are only locked at the end of the transaction, during the commit process.  At commit
+time, there is another check to see if any other processes have modified the pages that
 have been accessed during the transaction, by means of a transaction ID associated
 with each page.  If they have, the transaction is aborted and all changes discarded.
 Though this system works using mapped files, no I/O needs to occur normally --
 the writes just affect the mapped file's memory buffers.
 
-This mechanism provides read consistency in that if a transaction succeeds, it
-is guaranteed that no other transaction will have modified the pages accessed by
-the first transaction.  However, there is no guarantee the transaction will
+This mechanism provides read consistency in that if a transaction A succeeds, it
+is guaranteed that no other transaction B will have modified the pages accessed by
+transaction A.  However, there is no guarantee the transaction will
 succeed. Transactions that are automatically aborted are also automatically retried,
 with a backoff mechanism, until they succeed.
 
 Accesses to shared segments not during transactions are "real time" and there is no
-guarantee of consistency. The access control on shared segments not during
+guarantee of consistency. The access control on shared segments between (not during)
 transactions can be specified for each shared segment.
 
 Transactions are composable -- that is, they can be nested.  This is so that
@@ -61,18 +65,17 @@ Processes can have a number of shared memory areas, limited by the number of fil
 descriptors and virtual memory available.
 
 This package works at the process level, not at the thread level.  If you are
-looking for a multi-threaded approach, this is not for
-you.  However, it does work using arbitrarily large shared memory areas between
-processes, limited by the amount of virtual address space available.   Each
-process can map the shared segment to a known virtual location, so arbitrary
-data structures can exist in the shared area.  They just should not refer outside
-the shared area to objects that only exist in the private parts of each process's
-address space.
+looking for a multi-threaded approach, this is not for you.  However, it does work
+using arbitrarily large shared memory areas between processes.   Each
+process can map a shared segment to a known virtual location, so arbitrary
+data structures can exist in the shared area.  However, these data struct should
+not refer outside the shared area to objects that only exist in the private parts
+of a process's address space!
 
 It is arguable that it is better for threads of execution (processes, in this case)
 to share only the data structure they *intend* to share, not everything in the
 address space, that they only accidentally share.  That is the philosophy of this
-package.  To use this technical approach followed by this package, it is also the
+package.  To use the technical approach followed in this package, this is also the
 only possibility, at least so long as threads do not have their own memory maps!
 
 Another limitation of this package is that it operates on the OS page level.
@@ -102,7 +105,9 @@ anything that you later modify in the same transaction.  If the transaction is
 retried, the earlier reference will pick up the value set in an earlier try. You
 can set and then use a variable in the same transaction, but you can't use a
 variable and then set it to a new value and expect that to work right if retries
-are necessary.  Only information in the shared segments is managed transactionally.
+are necessary.  It is helpful to think of the code in a transaction as being the
+body of a loop, that you don't know how many times is going to be executed.
+Only information in the shared segments is managed transactionally.
 
 To use this package you only need to link in the compiled versions of stm.c and
 atomic-compat.c.  All visible APIs are exposed through stm.h.
