@@ -32,7 +32,8 @@ When no transaction is in progress, each shared area is visible to any processes
 that access that segment of mapped memory.
 
 When a transaction is in progress, the shared area is access-protected, and all
-accesses are trapped.  A signal handler keeps track of the accessed pages.
+accesses by the process performing the transaction are trapped.  Other processes are
+not affected.  A signal handler keeps track of the accessed pages.
 Upon first access in a transaction, each accessed page is remapped "private" so that
 any modifications are not visible to any other process.  If, on first access to a page
 within a transaction, it can be determined that another process has modified that page,
