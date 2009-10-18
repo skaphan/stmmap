@@ -38,6 +38,10 @@
 
 #define MAX_ACTIVE_TRANSACTIONS 100
 
+
+// The structs used by stm.c are defined here and not in the header file, so they are opaque to other programs.
+// To the extent necessary and useful, an access API is defined here and in stm.h.
+
 //
 // There's just one of these at the start of the metadata file associated with each shared segment
 //
@@ -75,8 +79,8 @@ typedef struct snapshot_list_element {
 } snapshot_list_element;
 
 //
-// There is a global stack that keeps track of nested transactions.  We only really commit changes on when we commit
-// the outermost transaction (the last one on the stack.
+// There is a global stack that keeps track of nested transactions.  We only really commit changes when we commit
+// the outermost transaction (the last one on the stack).
 //
 typedef struct transaction_stack_element {
     struct transaction_stack_element *next;
@@ -84,33 +88,43 @@ typedef struct transaction_stack_element {
 } transaction_stack_element;
 
 
-
+//
+// This data structure represents a shared memory area and the metadata that goes with it.
+// They are kept on a global list that is sorted by inode, to facilitate locking in a known order
+// to prevent deadlocks.
+//
 typedef struct shared_segment {
     struct shared_segment *next;
     
-    char *filename;
-    int fd;
-    ino_t inode;
-    char *metadata_filename;
-    int metadata_fd;
+    char *filename;                                         // Filename of file backing shared memory area
+    int fd;                                                 // File descriptor for above file
+    ino_t inode;                                            // inode of above file.
+    char *metadata_filename;                                // "metadata" file for above file - contains control 
+                                                            // info and page table with transaction info
+    int metadata_fd;                                        // file descriptor for metadata file
     
-    int default_prot_flags;
-    size_t page_size;
+    int default_prot_flags;                                 // protection flags (PROT_READ, PROT_WRITE, PROT_NONE)
+                                                            // for use on shared memory area *between* transactions
+    size_t page_size;                                       // cached value of operating system page size
     
-    size_t shared_seg_size;
-    void *shared_base_va;
+    size_t shared_seg_size;                                 // size of the shared memory area
+    void *shared_base_va;                                   // first virtual address of the shared memory area
     
-    size_t transaction_data_size;
-    struct transaction_data *segment_transaction_data;
-    struct page_table_element *segment_page_table;
+    size_t transaction_data_size;                           // size of the metadata area in memory
+    struct transaction_data *segment_transaction_data;      // the "control" information for all transactions on this 
+                                                            // shared segment.
+    struct page_table_element *segment_page_table;          // the page table describing transactions on this segment
     
     transaction_id_t transaction_id;                        // current transaction ID, if any 
-    struct snapshot_list_element *snapshot_list;
+    struct snapshot_list_element *snapshot_list;            // list of snapshotted pages accessed during a transaction
     
-    int n_prior_active_transactions;
+    int n_prior_active_transactions;                        // number of transactions active at the time the current one
+                                                            // started.
     transaction_id_t prior_active_transactions[MAX_ACTIVE_TRANSACTIONS];
-    
-    struct segalloc_node **free_list_addr;
+                                                            // array of transaction IDs of transactions active at the time
+                                                            // the current one started.
+        
+    struct segalloc_node **free_list_addr;                  // if stmalloc is in use, this points to the free list header
 } shared_segment;
 
 
