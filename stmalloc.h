@@ -1,6 +1,7 @@
 /*
  
  stmalloc.h
+ 
  This is the API for the STM package's optional memory allocator.
 
  Copyright 2009 Shel Kaphan

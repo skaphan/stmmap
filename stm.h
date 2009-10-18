@@ -2,6 +2,9 @@
  
  stm.h
  
+ This is the main API for stmmap, a Software Transactional Memory system.
+ All the functions and macros you need to use in your applications are declared here.
+ 
  Copyright 2009 Shel Kaphan
  
  This file is part of stmmap.

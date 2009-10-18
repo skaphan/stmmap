@@ -2,6 +2,10 @@
  
  stmalloc.c
  
+ This is the implementation of an optional memory allocator for shared memory segments that
+ works under stmmap, a Software Transactional Memory system.   It need not be used, but if you don't
+ want to write your own allocator, it might help.
+ 
  Copyright 2009 Shel Kaphan
  
  This file is part of stmmap.

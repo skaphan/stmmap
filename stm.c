@@ -2,7 +2,8 @@
  
  stm.c
  
- Interface to implementation of AVL trees, a form of balanced binary trees.
+ This is the implementation of the Software Transactional Memory system.
+ The corresponding API is in stm.h.
  
  Copyright 2009 Shel Kaphan
  

@@ -3,6 +3,8 @@
  AVLtree.h
  
  Interface to implementation of AVL trees, a form of balanced binary trees.
+ This is a low level implementation which does not depend on anything else
+ in stmmap in any way.
  
  Copyright 2009 Shel Kaphan
  

@@ -2,7 +2,7 @@
  
  atomic-compat.h
  
- This is a compatibility package for whatever OS-supplied atomic operators are to be found on your
+ This is the API for a compatibility package for whatever OS-supplied atomic operators are to be found on your
  platform.  It was originally implemented using MAC OS X  so the API is very similar to that.
  This file and atomic-compat.c can be conditionalized to support additional OS versions.
  
