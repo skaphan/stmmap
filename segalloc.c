@@ -460,16 +460,16 @@ void overlap_check(segalloc_node *t, void *base, size_t size) {
 }
 
 
-void print_free_list(segalloc_node *t) {
+void seg_print_free_list(segalloc_node *t) {
     AVLtreeNode *a = (AVLtreeNode *)t;
     
     if (a->left)
-        print_free_list((segalloc_node*)a->left);
+        seg_print_free_list((segalloc_node*)a->left);
     
     printf("[ %lx, %lx ] %lx\n", (unsigned long)t, (unsigned long)t+t->size, (unsigned long)t->size);
     
     if (a->right)
-        print_free_list((segalloc_node*)a->right);
+        seg_print_free_list((segalloc_node*)a->right);
 }
 
     

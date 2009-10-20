@@ -39,5 +39,9 @@ void seg_free(void *object_va, size_t size, void *base_va, struct segalloc_node 
 
 size_t seg_block_size_for(size_t size);
 
+// some diagnostic routines:
+
 int seg_verify_tree_integrity(struct segalloc_node *free_list);
+
+void seg_print_free_list(struct segalloc_node*); 
 
