@@ -101,14 +101,15 @@ process.
 
 Warning: since transactions will be retried until they succeed, any variables
 outside the explicitly shared memory segment(s) that are referenced within a
-transaction must be handled with care.  In particular, you should not access
-anything that you later modify in the same transaction.  If the transaction is
-retried, the earlier reference will pick up the value set in an earlier try. You
-can set and then use a variable in the same transaction, but you can't use a
-variable and then set it to a new value and expect that to work right if retries
-are necessary.  It is helpful to think of the code in a transaction as being the
-body of a loop, that you don't know how many times is going to be executed.
-Only information in the shared segments is managed transactionally.
+transaction must be handled with care.  In particular, you should not modify
+anything (outside the shared memory area) that you access earlier in the same
+transaction.  If the transaction is retried, the reference will pick up the
+value set in a previous try. You can set and then use a variable in the same
+transaction, but you can't read a variable that was initialized prior to a
+transactions, then set it to a new value, and expect that to work right if
+retries are necessary. It is helpful to think of the code in a transaction as
+being the body of a loop, that you don't know how many times is going to be
+executed. Only information in the shared segments is managed transactionally.
 
 To use this package you only need to link in the compiled versions of stm.c and
 atomic-compat.c.  All visible APIs are exposed through stm.h.
