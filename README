@@ -20,7 +20,28 @@
  along with stmmap.  If not, see <http://www.gnu.org/licenses/>.
  
  */
+ 
+ 
+INSTALLATION
+============
 
+To use this package you only need to compile and link stm.c and
+atomic-compat.c.  All visible APIs are exposed through stm.h.
+
+You may need to port atomic-compat.[ch] to your OS environment, as different
+OS versions have different atomic primitives. (Please send me the changes!)
+
+There is also a memory allocator for your shared segments, though use of
+this is not required to use the basic STM functionaly.  For this, you need
+to compile and link AVLtree.c, stmalloc.c, and segalloc.c.
+The visible API is in stmalloc.h.
+
+Example.c gives a very simple example of how to use this package.  In fact,
+this is what I used to debug this package.
+
+
+THEORY OF OPERATION
+===================
 
 The purpose of this package is to provide something akin to "Software
 Transactional Memory" functionality in C and C++, without requiring much extra
@@ -69,7 +90,7 @@ This package works at the process level, not at the thread level.  If you are
 looking for a multi-threaded approach, this is not for you.  However, it does work
 using arbitrarily large shared memory areas between processes.   Each
 process can map a shared segment to a known virtual location, so arbitrary
-data structures can exist in the shared area.  However, these data struct should
+data structures can exist in the shared area.  However, these data structures should
 not refer outside the shared area to objects that only exist in the private parts
 of a process's address space!
 
@@ -111,12 +132,33 @@ retries are necessary. It is helpful to think of the code in a transaction as
 being the body of a loop, that you don't know how many times is going to be
 executed. Only information in the shared segments is managed transactionally.
 
-To use this package you only need to link in the compiled versions of stm.c and
-atomic-compat.c.  All visible APIs are exposed through stm.h.
 
-There is also a memory allocator for your shared segments.  For this, you need
-to include the compiled versions of AVLtree.c, stmalloc.c, and segalloc.c.
-The visible API is in stmalloc.h.
+HOPES AND DREAMS
+================
+
+mmap() provides a very good basis for STM functionality, but it is limited to
+a multi-process, as opposed to multi-thread, implementation.  This is because
+there is no per-thread control of virtual address space.  If there was per-thread
+memory mapping, this could work in a multi-thread world.
+
+This could even be accomplished with a user hook so that user code could run
+when thread scheduling occurs.  That would also have the advantage of being able
+to access-protect thread-private data from accidental modification by other
+threads.
+
+Right now mmap() allows you to map a given region of memory to a region in a file.
+It would be useful if there were a call that did the complementary operation --
+taking the contents of memory as the source and associating that to a region of a file
+(basically what pwrite() does...).
+
+Alternatively, simply the ability to re-map a region (a set of pages) of virtual 
+memory to some other virtual address would be very useful.  Either way, this could
+avoid some memory-to-memory copying in the stmmap implementation.
+
+Shared memory mapping that is backed only by swap space and not by a file could
+also be a good thing, but there needs to be some way to name it.  (Mac OS has
+this).
+
 
 Shel Kaphan, Oct. 17, 2009
 
