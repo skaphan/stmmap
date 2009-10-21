@@ -32,20 +32,19 @@ You may need to port atomic-compat.[ch] to your OS environment, as different
 OS versions have different atomic primitives. (Please send me the changes!)
 
 There is also a memory allocator for your shared segments, though use of
-this is not required to use the basic STM functionaly.  For this, you need
+this is not required to use the basic STM functionality.  For this, you need
 to compile and link AVLtree.c, stmalloc.c, and segalloc.c.
 The visible API is in stmalloc.h.
 
 Example.c gives a very simple example of how to use this package.  In fact,
-this is what I used to debug this package.
+this is what I used to debug it.
 
 
 THEORY OF OPERATION
 ===================
 
-The purpose of this package is to provide something akin to "Software
-Transactional Memory" functionality in C and C++, without requiring much extra
-complexity for the programmer.	
+The purpose of this package is to provide "Software Transactional Memory"
+functionality in C and C++, without requiring much extra complexity for the programmer.	
 
 It is built on top of file-mapping -- in particular Unix's mmap() system call.
 One or more shared memory areas are opened by each process that uses this package.
