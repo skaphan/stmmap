@@ -469,7 +469,7 @@ void seg_print_free_list(segalloc_node *t) {
     printf("[ %lx, %lx ] %lx\n", (unsigned long)t, (unsigned long)t+t->size, (unsigned long)t->size);
     
     if (a->right)
-        seg_∫print_free_list((segalloc_node*)a->right);
+        seg_print_free_list((segalloc_node*)a->right);
 }
 
     
