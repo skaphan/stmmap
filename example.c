@@ -14,22 +14,15 @@
         
 void alloc_test(struct shared_segment *seg, int n_iterations) {
     int i, j, size;
-    
     size_t size_mask = 0xfffff;
-    
     void *allocated[array_size];
 
-    memset(allocated, 0, sizeof(allocated));
-    
+    memset(allocated, 0, sizeof(allocated));    
     srandom(getpid());
-
-
         
-    for(i=0; i<array_size; i++) {       
-        
+    for(i=0; i<array_size; i++) {               
         size = random() & size_mask;    
-        allocated[i] = stm_alloc(seg, size);
-                
+        allocated[i] = stm_alloc(seg, size);        // performs a transaction internally
     }
     
     for(i=0; i<n_iterations; i++) {
@@ -41,11 +34,11 @@ void alloc_test(struct shared_segment *seg, int n_iterations) {
         stm_start_transaction("blech");
         
         if ((t = allocated[j]) != NULL)
-            stm_free(t);
-        
+            stm_free(t);            // performs a transaction internally - 
+                                    // note nested transaction!
         
         size = random() & size_mask;
-        t = stm_alloc(seg, size);
+        t = stm_alloc(seg, size);           // performs a transaction internally
             
         seg_verify_tree_integrity(*stm_free_list_addr(seg));
 
@@ -58,10 +51,9 @@ void alloc_test(struct shared_segment *seg, int n_iterations) {
     
     for (i=0; i<array_size; i++) {
         if (allocated[i])
-            stm_free(allocated[i]);
+            stm_free(allocated[i]);     // performs a transaction internally
     }
         
-    
     stm_start_transaction("foo");
     seg_print_free_list(*stm_free_list_addr(seg));
     stm_commit_transaction("foo");
@@ -76,19 +68,15 @@ void alloc_test(struct shared_segment *seg, int n_iterations) {
 int main (int argc, const char * argv[]) {
     
     int prot_flags = PROT_NONE;
-
     struct shared_segment *seg;
-    
     int segsize = 1<<23;        
-    stm_init(0x7);              // blab a lot
+    stm_init(0x7);              // blab a lot - see API and change if you like.
     
     if ((seg = stm_open_shared_segment("/tmp/stmtest12345", segsize, (void*) 0,
                                        prot_flags)) == NULL)
         exit (-1);
     
-    
     printf("shared segment base = 0x%lx\n", (unsigned long)stm_segment_base(seg));
-
     
     if (argv[1] && argv[1][0] == 'i') {
         stm_alloc_init(seg, 1);
@@ -105,5 +93,3 @@ int main (int argc, const char * argv[]) {
     exit (0);
     
 }
-    
-    
