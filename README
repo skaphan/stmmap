@@ -132,6 +132,36 @@ being the body of a loop, that you don't know how many times is going to be
 executed. Only information in the shared segments is managed transactionally.
 
 
+PROS AND CONS
+=============
+
+Here are some pros and cons of this approach:
+
+Pros
+----
+* Very easy to use
+* Avoids accidental memory sharing in threads
+* If number of processes <= number of cores, no worries about scheduling overhead
+* No extra code executed on memory reads and writes, except the first access to 
+  each page during a transaction.
+* Enables STM in C-like languages
+
+
+Cons
+----
+* Can be a little tricky to do the right thing with non-transactionally controlled
+  data in the body of a transaction -- until you "get it."
+* Coarse grain approach -- pages supported by OS -- leads to more retried transactions
+  because of more contention.
+* If number of proceses > number of cores, scheduling overhead more significant
+  than thread-based approach.
+* System call overhead in mmap() is non-trivial.
+* Requires language such as C/C++ in which memory and file-mapped pages are directly
+  accessible.
+* Debuggers may have a hard time dealing with a program that depends on SIGBUS to
+  work at all!
+
+
 HOPES AND DREAMS
 ================
 
