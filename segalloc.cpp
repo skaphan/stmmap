@@ -1,9 +1,10 @@
 /*
  
- segalloc.c
+ segalloc.cpp
  
- This is the implementation of a low-level memory allocator for memory segments.  
- It knows nothing of the STM package or any of its objects. It is used by stmalloc.c.
+ This is the multi-threading compatible implementation of a low-level memory
+ allocator for memory segments.  It knows nothing of the STM package or any of
+ its objects. It is used by stmalloc.c.
  
  Copyright 2009 Shel Kaphan
  

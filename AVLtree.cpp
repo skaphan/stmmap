@@ -1,8 +1,12 @@
 /*
  
- AVLtree.c
+ AVLtree.cpp
  
- Implementation of AVL trees, a form of balanced binary tree.
+ Position-independent, multi-threading compatible implementation of AVL trees,
+ a form of balanced binary tree.
+ 
+ The trees are assumed to be in a mapped, shared segment, so we use offset_ptrs instead
+ of regular pointers, to make the tree structures position-independent.
  
  Copyright 2009 Shel Kaphan
  
