@@ -73,3 +73,8 @@ void *stm_alloc(struct shared_segment *seg, size_t size) {
     return result + sizeof(size_t);
 }
 
+// This apparently trivial function causes the offset_ptr which is the free list
+// to be converted into a regular pointer for regular programs to work with.
+struct segalloc_node *stm_free_list(struct shared_segment *seg) {
+    return seg_free_list_from_free_list_addr(stm_free_list_addr(seg));
+}

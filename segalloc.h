@@ -29,13 +29,17 @@
 
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct segalloc_node;
 
-struct segalloc_node **seg_alloc_init(void *base_va, size_t size, int mode);
+void *seg_alloc_init(void *base_va, size_t size, int mode);
 
-void *seg_alloc(size_t size, struct segalloc_node **free_list);
+void *seg_alloc(size_t size, void *free_list_addr);
     
-void seg_free(void *object_va, size_t size, void *base_va, struct segalloc_node **free_list);
+void seg_free(void *object_va, size_t size, void *base_va, void *free_list_addr);
 
 size_t seg_block_size_for(size_t size);
 
@@ -44,4 +48,10 @@ size_t seg_block_size_for(size_t size);
 int seg_verify_tree_integrity(struct segalloc_node *free_list);
 
 void seg_print_free_list(struct segalloc_node*); 
+    
+struct segalloc_node* seg_free_list_from_free_list_addr(void *free_list_addr);
+
+#ifdef __cplusplus
+};
+#endif
 

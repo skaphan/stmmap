@@ -37,7 +37,6 @@
 
 typedef uint32_t transaction_id_t;
 
-extern jmp_buf stm_jmp_buf;
 
 /*
  Call stm_init() to initialize the STM package.  It sets up signal handlers and verbosity level for 
@@ -56,6 +55,13 @@ extern jmp_buf stm_jmp_buf;
  -1         failure, stm_error contains error code.
  */
 int stm_init(int verbose);
+
+/*
+ stm_init_thread_locals() must be called to initialize thread-local variables.
+ This is done automatically in stm_init() for the main thread.
+ */
+void stm_init_thread_locals();
+
 
 /* 
  Call stm_open_shared_segment() to open a shared memory segment in each process that wants to access it.
@@ -102,9 +108,6 @@ struct shared_segment *stm_open_shared_segment(char *filename, size_t size, void
  -1             failure, stm_error contains error code.
  */
 
-
-#define STM_MIN_DELAY 10
-
 /*
  Call this macro, not the internal function it calls.  This is what enables transaction restarts.
  */
@@ -112,7 +115,7 @@ struct shared_segment *stm_open_shared_segment(char *filename, size_t size, void
 {   if (_stm_transaction_stack_empty()) {\
         int _status_, _delay_ = STM_MIN_DELAY;\
         struct timespec _ts_;\
-        if ((_status_ = setjmp(stm_jmp_buf)) > 0) {\
+        if ((_status_ = setjmp(*stm_jmp_buf())) > 0) {\
             _ts_.tv_sec = 0;\
             _ts_.tv_nsec = _delay_;\
             nanosleep(&_ts_, NULL);\
@@ -123,6 +126,13 @@ struct shared_segment *stm_open_shared_segment(char *filename, size_t size, void
     }\
     _stm_start_transaction(trans_name);\
 }
+
+
+// Things needed when the above macro expands:
+//
+#define STM_MIN_DELAY 10
+jmp_buf *stm_jmp_buf();
+
 
 
 
@@ -189,7 +199,8 @@ size_t stm_page_size(struct shared_segment *seg);
  */
 int stm_segment_fd(struct shared_segment *seg);
 
-extern int stm_errno;       // on errors, this variable will contain one of the following codes:
+int stm_errno();       // on errors, this variable will contain one of the following codes:
+                       // This is a function, not a global, because it is per-thread
 
 /*
  Possible values of stm_errno.
@@ -219,13 +230,13 @@ extern int stm_errno;       // on errors, this variable will contain one of the 
  Returns a pointer to the head of the free list for a shared_segment.  Note the head of the
  free list is *in* the segment because it is shared by all processes that use the segment!
  */
-struct segalloc_node **stm_free_list_addr(struct shared_segment *seg);
+void **stm_free_list_addr(struct shared_segment *seg);
 
 /*
  The following function is for use by stmalloc.c
  Records the head of the free list into the shared_segment object.
  */
-void stm_set_free_list_addr(struct shared_segment *seg, struct segalloc_node **free_list_addr);
+void stm_set_free_list_addr(struct shared_segment *seg, void **free_list_addr);
 
 
 /*

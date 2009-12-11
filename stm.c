@@ -31,6 +31,8 @@
 #include <signal.h>
 #include <string.h>
 #include <unistd.h>         // absolutely need this for pwrite().  (Just spent an hour chasing this...)
+                            // (leaving it in even though I'm not using pwrite() right now...)
+#include <pthread.h>
 
 #include "atomic-compat.h"
 #include "stm.h"
@@ -124,19 +126,84 @@ typedef struct shared_segment {
                                                             // array of transaction IDs of transactions active at the time
                                                             // the current one started.
         
-    struct segalloc_node **free_list_addr;                  // if stmalloc is in use, this points to the free list header
+    void *free_list_addr;                                  // if stmalloc is in use, this points to the free list header
 } shared_segment;
 
 
-static shared_segment *shared_segment_list;
-
-static transaction_stack_element *transaction_stack;
-
 static int stm_verbose;
 
-int stm_errno;
+// There used to be more globals, but now they are in thread-local storage
+//
+// static shared_segment *shared_segment_list;
+// static transaction_stack_element *transaction_stack;
+// jmp_buf stm_jmp_buf;
+// int stm_errno;
 
-jmp_buf stm_jmp_buf;
+
+static pthread_key_t shared_segment_list_key;
+static pthread_key_t transaction_stack_key;
+static pthread_key_t stm_jmp_buf_key;
+static pthread_key_t stm_errno_key;
+
+
+
+static shared_segment *shared_segment_list() {
+    return (shared_segment*)pthread_getspecific(shared_segment_list_key);
+}
+
+static void set_shared_segment_list(shared_segment *seg) {
+    pthread_setspecific(shared_segment_list_key, seg);
+}
+
+
+static transaction_stack_element *transaction_stack() {
+    return (transaction_stack_element *)pthread_getspecific(transaction_stack_key);
+}
+
+static void set_transaction_stack(transaction_stack_element *trans) {
+    pthread_setspecific(transaction_stack_key, trans);
+}
+
+// This one has to be global scope so clients can use it.
+jmp_buf *stm_jmp_buf() {
+    return (jmp_buf *)pthread_getspecific(stm_jmp_buf_key);
+}
+
+
+void set_stm_jmp_buf(jmp_buf *jb) {
+    pthread_setspecific(stm_jmp_buf_key, jb);
+}
+
+
+int stm_errno() {
+    return (long int)pthread_getspecific(stm_errno_key);
+}
+
+static void set_stm_errno(int err) {
+    long int lerr = err;
+    pthread_setspecific(stm_errno_key, (void*)lerr);
+}
+
+
+static void create_thread_keys() {
+    pthread_key_create(&shared_segment_list_key, NULL);
+    pthread_key_create(&transaction_stack_key, NULL);
+    pthread_key_create(&stm_jmp_buf_key, NULL);
+    pthread_key_create(&stm_errno_key, NULL);
+    
+}
+
+// Must be called in a thread, except the main thread, before doing any transactions
+void stm_init_thread_locals()
+{
+    set_shared_segment_list(NULL);
+    set_transaction_stack(NULL);
+    set_stm_errno(0);
+    
+    set_stm_jmp_buf(calloc(1, sizeof(jmp_buf)));
+    
+}
+
 
 //
 // The next few routines manage a shared list of active transaction IDs in the metadata segment.  
@@ -236,14 +303,14 @@ static int check_file_length(int fd, size_t length, ino_t *inode) {
     if ((sbuf.st_mode & S_IFMT) != S_IFREG) {
         if (stm_verbose & 1)
             fprintf(stderr, "check_file_length: bad filetype");
-        stm_errno = STM_FILETYPE_ERROR;
+        set_stm_errno(STM_FILETYPE_ERROR);
         return -1;
     } else if (length > sbuf.st_size) {
         //      fprintf(stderr, "file too short\n");
         if (ftruncate(fd, length) == -1) {
             if (stm_verbose & 1)
                 perror("check_file_length: ftruncate failed");
-            stm_errno = STM_FILESIZE_ERROR;         
+            set_stm_errno(STM_FILESIZE_ERROR);         
             return -1;
         }
     }
@@ -261,11 +328,11 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     
     shared_segment *seg;
     if ((seg = calloc(1, sizeof(shared_segment))) == NULL) {
-        stm_errno = STM_ALLOC_ERROR;
+        set_stm_errno(STM_ALLOC_ERROR);
         return NULL;
     }
     if ((seg->filename = calloc(1, strlen(filename) + 1)) == NULL) {
-        stm_errno = STM_ALLOC_ERROR;
+        set_stm_errno(STM_ALLOC_ERROR);
         stm_close_shared_segment(seg);
         return NULL;
     }
@@ -274,7 +341,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     if ((seg->fd = open(seg->filename, O_RDWR|O_CREAT, 0777)) < 0) {
         if (stm_verbose & 1)
             fprintf(stderr, "stm_open_shared_segment: could not open file %s: %s\n", seg->filename, strerror(errno));
-        stm_errno = STM_OPEN_ERROR;
+        set_stm_errno(STM_OPEN_ERROR);
         seg->fd = 0;
         stm_close_shared_segment(seg);
         return NULL;
@@ -302,7 +369,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
         if (stm_verbose & 1)
             fprintf(stderr, "stm_open_shared_segment: could not open metadata file %s: %s\n",
                             seg->filename, strerror(errno));
-        stm_errno = STM_OPEN_ERROR;
+        set_stm_errno(STM_OPEN_ERROR);
         seg->metadata_fd = 0;
         stm_close_shared_segment(seg);
         return NULL;
@@ -335,7 +402,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     } else {
         if (stm_verbose & 1)
             perror("stm_open_shared_segment: error mapping shared segment");
-        stm_errno = STM_MMAP_ERROR;
+        set_stm_errno(STM_MMAP_ERROR);
         stm_close_shared_segment(seg);
         return NULL;
     }   
@@ -348,7 +415,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     } else {
         if (stm_verbose & 1)
                 perror("stm_open_shared_segment: error mapping shared metadata segment");
-        stm_errno = STM_MMAP_ERROR;
+        set_stm_errno(STM_MMAP_ERROR);
         stm_close_shared_segment(seg);
         return NULL;
     }
@@ -358,7 +425,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     // so each process using a set of mapped files will be able to list them in the same order, avoiding livelocks
     // during commit.
     
-    for(s = shared_segment_list, prev=NULL; s; prev = s, s = s->next) {
+    for(s = shared_segment_list(), prev=NULL; s; prev = s, s = s->next) {
         if (seg->inode < s->inode) {
             break;
         }
@@ -368,7 +435,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     if (prev)
         prev->next = seg;
     else
-        shared_segment_list = seg;
+        set_shared_segment_list(seg);
     
     
     
@@ -460,7 +527,7 @@ static void abort_transaction_on_segment(shared_segment *seg) {
 
 
 int _stm_transaction_stack_empty() {
-    return (transaction_stack == NULL);
+    return (transaction_stack() == NULL);
 }
 
 static int push_transaction_stack(char *trans_name) {
@@ -468,14 +535,14 @@ static int push_transaction_stack(char *trans_name) {
     
     
     if ((trans = calloc(1, sizeof(transaction_stack_element))) == NULL) {
-        stm_errno = STM_ALLOC_ERROR;
+        set_stm_errno(STM_ALLOC_ERROR);
         return -1;
     }
     
 #if 0
     if (trans_name) {
         if ((trans->transaction_name = calloc(1, strlen(trans_name)+1)) == null) {
-            stm_errno = STM_ALLOC_ERROR;
+            set_stm_errno(STM_ALLOC_ERROR);
             free(trans);
             return -1;
         }
@@ -484,12 +551,12 @@ static int push_transaction_stack(char *trans_name) {
 #endif
     
     trans->transaction_name = trans_name;
-    trans->next = transaction_stack;
-    transaction_stack = trans;
+    trans->next = transaction_stack();
+    set_transaction_stack(trans);
     
 #if 0
     printf("> ");
-    for (trans = transaction_stack; trans; trans = trans->next)
+    for (trans = transaction_stack(); trans; trans = trans->next)
         printf("%s ", trans->transaction_name);
     printf("\n");
 #endif
@@ -503,15 +570,15 @@ static void pop_transaction_stack() {
     
 #if 0
     printf("< ");
-    for (trans = transaction_stack; trans; trans = trans->next)
+    for (trans = transaction_stack(); trans; trans = trans->next)
         printf("%s ", trans->transaction_name);
     printf("\n");
 #endif
 
-    trans = transaction_stack;
+    trans = transaction_stack();
     if (trans) {
         //  if (trans->transaction_name) free(trans->transaction_name);
-        transaction_stack = transaction_stack->next;
+        set_transaction_stack(trans->next);
         free(trans);
     }
 }
@@ -519,19 +586,19 @@ static void pop_transaction_stack() {
 static void stm_abort_transaction() {
     shared_segment *seg;
     
-    for(seg = shared_segment_list; seg; seg = seg->next) {
+    for(seg = shared_segment_list(); seg; seg = seg->next) {
         abort_transaction_on_segment(seg);
     }
-    while (transaction_stack)
+    while (transaction_stack())
         pop_transaction_stack();
     
 }
 
 static void transaction_error_exit(int error_code, int return_value) {
     if (error_code)
-        stm_errno = error_code;
+        set_stm_errno(error_code);
     stm_abort_transaction();
-    longjmp(stm_jmp_buf, return_value);
+    longjmp(*stm_jmp_buf(), return_value);
     
 }
 
@@ -546,19 +613,19 @@ static int insert_into_snapshot_list(shared_segment *seg, void *va, transaction_
     if (va < seg->shared_base_va || seg->shared_base_va + seg->shared_seg_size <= va) {
         if (stm_verbose & 1)
             fprintf(stderr, "insert_into_snapshot_list: va %lx not in segment\n", (unsigned long)va);
-        stm_errno = STM_ACCESS_ERROR;
+        set_stm_errno(STM_ACCESS_ERROR);
         return -1;
     }
     
     
     if ((new_elt = calloc(1, sizeof(snapshot_list_element))) == NULL) {
-        stm_errno = STM_ALLOC_ERROR;
+        set_stm_errno(STM_ALLOC_ERROR);
         return -1;
     }
     
     new_elt->original_page_va = va;
     if ((new_elt->original_page_snapshot = malloc(seg->page_size)) == NULL) {
-        stm_errno = STM_ALLOC_ERROR;
+        set_stm_errno(STM_ALLOC_ERROR);
         return -1;
     }
     
@@ -594,7 +661,7 @@ static int defeat_optimizer(volatile int *foo) {
 
 shared_segment *stm_find_shared_segment(void *va) {
     shared_segment *seg;
-    for (seg = shared_segment_list; seg; seg = seg->next) {
+    for (seg = shared_segment_list(); seg; seg = seg->next) {
         if (seg->shared_base_va <= va &&
             va < seg->shared_base_va + seg->shared_seg_size)
             return seg;
@@ -602,11 +669,11 @@ shared_segment *stm_find_shared_segment(void *va) {
     return NULL;
 }
 
-struct segalloc_node **stm_free_list_addr(shared_segment *seg) {
+void **stm_free_list_addr(shared_segment *seg) {
     return seg->free_list_addr;
 }
 
-void stm_set_free_list_addr(shared_segment *seg, struct segalloc_node **free_list_addr) {
+void stm_set_free_list_addr(shared_segment *seg, void **free_list_addr) {
     seg->free_list_addr = free_list_addr;
 }
 
@@ -646,7 +713,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     sa.sa_mask = 0;
     sa.sa_handler = SIG_DFL;
     
-    if (transaction_stack == NULL) {
+    if (transaction_stack() == NULL) {
         if (stm_verbose & 1)
             fprintf(stderr, "signal_handler: virtual address %lx referenced outside transaction\n",
                     (unsigned long)si->si_addr);
@@ -801,7 +868,7 @@ int stm_init(int verbose) {
     struct sigaction sa;
     
     stm_verbose = verbose;
-    stm_errno = 0;
+    set_stm_errno(0);
     
     sa.sa_flags = SA_SIGINFO;
     sa.sa_mask = 0;
@@ -810,8 +877,11 @@ int stm_init(int verbose) {
     if ((status = sigaction(SIGBUS, &sa, &saved_sigaction)) != 0) {     
         if (stm_verbose & 1)
             fprintf(stderr, "sigaction status = %d\n", status);
-        stm_errno = STM_SIGNAL_ERROR;
+        set_stm_errno(STM_SIGNAL_ERROR);
     }
+    
+    create_thread_keys();
+    stm_init_thread_locals();
     
     return status;
     
@@ -838,12 +908,12 @@ static int start_transaction_on_segment(shared_segment *seg) {
     atomic_spin_lock_unlock(&seg->segment_transaction_data->transaction_lock);
         
     status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_NONE);
-//  status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE);
+    // status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE);
     
     if (status == -1) {
         if (stm_verbose & 1)
             perror("start_transaction: mprotect error");
-        stm_errno = STM_MMAP_ERROR;
+        set_stm_errno(STM_MMAP_ERROR);
         return -1;
     }
         
@@ -854,7 +924,7 @@ int _stm_start_transaction(char *trans_name) {
     shared_segment *seg;
     
         
-    stm_errno = 0;      // This is as good a place as any to re-initialize this error code to 0.
+    set_stm_errno(0);      // This is as good a place as any to re-initialize this error code to 0.
     
     if (trans_name == NULL) {
         if (stm_verbose & 1)
@@ -862,8 +932,8 @@ int _stm_start_transaction(char *trans_name) {
         transaction_error_exit(STM_NULL_NAME_ERROR, -1);    }
     
 
-    if (transaction_stack == NULL)
-        for(seg = shared_segment_list; seg; seg = seg->next) {
+    if (transaction_stack() == NULL)
+        for(seg = shared_segment_list(); seg; seg = seg->next) {
             if (start_transaction_on_segment(seg) != 0) {
                 transaction_error_exit(0, -1);
             }
@@ -907,7 +977,7 @@ static int lock_segment_pages(shared_segment *seg) {
                 fprintf(stderr, "lock_segment_pages: Transaction %d modified page %lx!\n",
                         page_table_elt->completed_transaction, page_num);
             collision_histo[5]++;
-            stm_errno = STM_COLLISION_ERROR;
+            set_stm_errno(STM_COLLISION_ERROR);
             return 1;
             
         }
@@ -919,7 +989,7 @@ static int lock_segment_pages(shared_segment *seg) {
                 fprintf(stderr, "lock_segment_pages: Transaction %d is modifying page %lx!\n",
                         page_table_elt->current_transaction, page_num);
             collision_histo[6]++;
-            stm_errno = STM_COLLISION_ERROR;            
+            set_stm_errno(STM_COLLISION_ERROR);            
             return 1;
         }   
         
@@ -946,7 +1016,7 @@ static int lock_segment_pages(shared_segment *seg) {
             if (stm_verbose & 2)
                 fprintf(stderr, "lock_segment_pages: Race detected. Failed to lock page %lx\n", page_num);
             collision_histo[7]++;
-            stm_errno = STM_COLLISION_ERROR;            
+            set_stm_errno(STM_COLLISION_ERROR);            
             return 1;
         }       
         
@@ -956,7 +1026,7 @@ static int lock_segment_pages(shared_segment *seg) {
             if (stm_verbose & 1) 
                 fprintf(stderr, "lock_segment_pages:  page %lx should already be locked by transaction %d, but is owned by %d\n",
                         page_num, seg->transaction_id, page_table_elt->current_transaction);
-            stm_errno = STM_OWNERSHIP_ERROR;
+            set_stm_errno(STM_OWNERSHIP_ERROR);
             return -1;
         }
 
@@ -966,7 +1036,7 @@ static int lock_segment_pages(shared_segment *seg) {
                 fprintf(stderr, "lock_segment_pages: Transaction %d modified page %lx!\n",
                         page_table_elt->completed_transaction, page_num);
             collision_histo[8]++;
-            stm_errno = STM_COLLISION_ERROR;
+            set_stm_errno(STM_COLLISION_ERROR);
             return 1;           
         }       
     }
@@ -992,7 +1062,7 @@ static int write_locked_segment_pages(shared_segment *seg) {
     if (status == (void*)-1) {
         if (stm_verbose & 1)
             perror("write_locked_pages: mmap error");
-        stm_errno = STM_MMAP_ERROR;
+        set_stm_errno(STM_MMAP_ERROR);
         return -1;
     }
     
@@ -1052,9 +1122,9 @@ int stm_commit_transaction(char *trans_name) {
     shared_segment *seg;
     int result = 0;
     
-    stm_errno = 0;
+    set_stm_errno(0);
     
-    if (transaction_stack == NULL) {
+    if (transaction_stack() == NULL) {
         if (stm_verbose & 1)
             fprintf(stderr, "stm_commit_transaction:  empty transaction stack while trying to commit transaction \"%s\"\n",
                     trans_name);
@@ -1067,15 +1137,15 @@ int stm_commit_transaction(char *trans_name) {
         transaction_error_exit(STM_NULL_NAME_ERROR, -1);
     }
     
-    if (strcmp(transaction_stack->transaction_name, trans_name) != 0) { 
+    if (strcmp(transaction_stack()->transaction_name, trans_name) != 0) { 
         if (stm_verbose & 1)
             fprintf(stderr, "stm_commit_transaction: \"%s\" is not the innermost transaction (\"%s\" is)\n",
-                    trans_name, transaction_stack->transaction_name);
+                    trans_name, transaction_stack()->transaction_name);
         
         transaction_error_exit(STM_TRANS_STACK_ERROR, -1);
     }
     
-    if (transaction_stack->next == NULL) {
+    if (transaction_stack()->next == NULL) {
         // only actually commit on outermost transaction.
         
         sigset_t blocked_signals;
@@ -1083,14 +1153,16 @@ int stm_commit_transaction(char *trans_name) {
         
         // We don't want to be interrupted or anything during the commit of the transaction.
         sigfillset(&blocked_signals);
-        if (sigprocmask(SIG_SETMASK, &blocked_signals, &saved_signals) == -1) {
+        
+        // if (sigprocmask(SIG_SETMASK, &blocked_signals, &saved_signals) == -1) {
+        if (pthread_sigmask(SIG_SETMASK, &blocked_signals, &saved_signals) == -1) {
             if (stm_verbose & 1)
                 perror("stm_commit_transaction: error blocking signals");
             transaction_error_exit(STM_SIGNAL_ERROR, -1);
         }
         
 
-        for(seg = shared_segment_list; seg; seg = seg->next) {
+        for(seg = shared_segment_list(); seg; seg = seg->next) {
             if ((result = lock_segment_pages(seg)) != 0) {
                 // if there is a failure on any shared segment, abort on all segments
                 transaction_error_exit(0, result);
@@ -1099,7 +1171,7 @@ int stm_commit_transaction(char *trans_name) {
         
         
         
-        for(seg = shared_segment_list; seg; seg = seg->next) {
+        for(seg = shared_segment_list(); seg; seg = seg->next) {
             if ((result = write_locked_segment_pages(seg)) != 0) {
                 // if there is a failure on any shared segment, abort on all segments
                 transaction_error_exit(0, result);
@@ -1108,10 +1180,11 @@ int stm_commit_transaction(char *trans_name) {
         
         // At this point, it's really too late to reverse anything...
         
-        if (sigprocmask(SIG_SETMASK, &saved_signals, NULL) == -1) {
+        // if (sigprocmask(SIG_SETMASK, &saved_signals, NULL) == -1) {
+        if (pthread_sigmask(SIG_SETMASK, &saved_signals, NULL) == -1) {
             if (stm_verbose & 1)
                 perror("stm_commit_transaction: error unblocking signals");
-            stm_errno = STM_SIGNAL_ERROR;
+            set_stm_errno(STM_SIGNAL_ERROR);
             result = -1;
         }                       
     }
@@ -1140,12 +1213,12 @@ void stm_close_shared_segment(shared_segment *seg) {
     if (seg->metadata_fd)
         close(seg->metadata_fd);
     
-    for (s = shared_segment_list, prev=NULL; s; prev = s, s=s->next) {
+    for (s = shared_segment_list(), prev=NULL; s; prev = s, s=s->next) {
         if (s == seg) {
             if (prev)
                 prev->next = s->next;
             else
-                shared_segment_list = s->next;
+                set_shared_segment_list(s->next);
             break;
         }
     }
@@ -1157,8 +1230,9 @@ void stm_close_shared_segment(shared_segment *seg) {
 
 void stm_close()
 {
-    while (shared_segment_list)
-        stm_close_shared_segment(shared_segment_list);
+    shared_segment *s;
+    while ((s = shared_segment_list()) != NULL)
+        stm_close_shared_segment(s);
     sigaction(SIGBUS, &saved_sigaction, 0);
 }
 

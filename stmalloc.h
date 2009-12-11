@@ -51,5 +51,6 @@ void *stm_alloc(struct shared_segment *seg, size_t size);
  */
 void stm_free(void *va);
 
+struct segalloc_node *stm_free_list(struct shared_segment *seg);
 
 
