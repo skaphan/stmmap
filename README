@@ -199,5 +199,13 @@ also be a good thing, but there needs to be some way to name it.  (Mac OS has
 this).
 
 
+ACKNOWLEDGEMENTS
+================
+
+Thanks to Bryan Woods who convinced me a multi-threaded version of stmmap could work
+and showed me offset_ptr, and who also came up with a way to make it possible to use
+gdb to debug programs that use stmmap.
+
+
 Shel Kaphan, Oct. 17, 2009
 
