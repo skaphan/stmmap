@@ -37,6 +37,7 @@
 #include "atomic-compat.h"
 #include "stm.h"
 
+#undef PER_PAGE_MMAPS
 
 #define MAX_ACTIVE_TRANSACTIONS 100
 
@@ -397,7 +398,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     status = mmap(requested_va, seg->shared_seg_size, seg->default_prot_flags, mmap_flags, seg->fd, (off_t)0);  
     
     if (status != (void*)-1) {
-        seg->shared_base_va = status;
+        seg->shared_base_va = status;   
         //      fprintf(stderr, "shared base va = %x\n", status);
     } else {
         if (stm_verbose & 1)
@@ -406,6 +407,7 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
         stm_close_shared_segment(seg);
         return NULL;
     }   
+    
     
     status = mmap(0, seg->transaction_data_size, PROT_READ|PROT_WRITE, MAP_SHARED, seg->metadata_fd, (off_t)0); 
     
@@ -472,7 +474,7 @@ static void free_snapshot_list(shared_segment *seg) {
 
 static void abort_transaction_on_segment(shared_segment *seg) {
     snapshot_list_element *sl;
-    int page_num;
+    size_t page_num;
     page_table_element *page_table_elt;
     void *status;
     
@@ -494,7 +496,7 @@ static void abort_transaction_on_segment(shared_segment *seg) {
         
         if (stm_verbose & 4) {
             int dirty = memcmp(sl->original_page_va, sl->original_page_snapshot, seg->page_size);
-            fprintf(stderr, " %s%x", dirty? "*":"", page_num);          
+            fprintf(stderr, " %s%lx", dirty? "*":"", page_num);          
         }                   
         
         if (page_table_elt->current_transaction == seg->transaction_id) {
@@ -506,6 +508,19 @@ static void abort_transaction_on_segment(shared_segment *seg) {
             page_table_elt->current_transaction = 0;
         }
         
+
+#ifdef PER_PAGE_MMAPS
+        if (seg->default_prot_flags == PROT_NONE) {
+            status = (void*)(long)mprotect(sl->original_page_va, seg->page_size, PROT_NONE);
+        } else   
+        {    
+            status = mmap(sl->original_page_va, seg->page_size, seg->default_prot_flags, MAP_FIXED|MAP_SHARED, seg->fd, 
+                          (off_t)(sl->original_page_va - seg->shared_base_va));
+        }
+        if (status == (void*)-1)
+            perror("abort_transaction_on_segment: mmap error");
+#endif
+    
     }
     
     if (stm_verbose & 4)
@@ -515,10 +530,17 @@ static void abort_transaction_on_segment(shared_segment *seg) {
         
     // reprotect *all* pages with the default inter-transaction protection.
     
-    status = mmap(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags, MAP_FIXED|MAP_SHARED, seg->fd, 
-                    (off_t)0);
+#ifndef PER_PAGE_MMAPS
+    if (seg->default_prot_flags == PROT_NONE) {
+        status = (void*)(long)mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_NONE);
+    } else   
+    {    
+        status = mmap(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags, MAP_FIXED|MAP_SHARED, seg->fd, 
+                      (off_t)0);
+    }
     if (status == (void*)-1)
         perror("abort_transaction_on_segment: mmap error");
+#endif
     
     seg->transaction_id = 0;    
             
@@ -705,7 +727,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     shared_segment *seg;
     page_table_element *page_table_elt;
     transaction_id_t completed_transaction;
-    int page_num;   
+    size_t page_num;   
     
     struct sigaction sa;
     
@@ -753,14 +775,14 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         if (seg->transaction_id != page_table_elt->current_transaction) {
             
             if (stm_verbose & 2)
-                fprintf(stderr, "Transaction %d owns page %x while transaction %d is snapshotting it.\n",
+                fprintf(stderr, "Transaction %d owns page %lx while transaction %d is snapshotting it.\n",
                         page_table_elt->current_transaction, page_num, seg->transaction_id);
             collision_histo[0]++;
             transaction_error_exit(STM_COLLISION_ERROR, 1);
             return;
         } else {
             if (stm_verbose & 1)
-                fprintf(stderr, "Transaction %d already owns page %x\n", 
+                fprintf(stderr, "Transaction %d already owns page %lx\n", 
                         page_table_elt->current_transaction, page_num);
             transaction_error_exit(STM_OWNERSHIP_ERROR, -1);
         }
@@ -784,7 +806,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     if ((int32_t)completed_transaction - (int32_t)seg->transaction_id > 0) {
         
         if (stm_verbose & 2)
-            fprintf(stderr, "On page %x, current transaction %d is before page's completed transaction %d\n",
+            fprintf(stderr, "On page %lx, current transaction %d is before page's completed transaction %d\n",
                     page_num, seg->transaction_id, completed_transaction);
         
         collision_histo[1]++;
@@ -794,7 +816,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     
     if (find_prior_active_transaction(seg, completed_transaction)) {
         if (stm_verbose & 2)
-            fprintf(stderr, "On page %x, completed transaction %d was active when transaction %d started\n",
+            fprintf(stderr, "On page %lx, completed transaction %d was active when transaction %d started\n",
                     page_num, completed_transaction, seg->transaction_id);
         collision_histo[2]++;
         transaction_error_exit(STM_COLLISION_ERROR, 1); 
@@ -804,6 +826,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         
     // Change from shared to private mapping, and make the page readable and writable.
     //
+           
     status = mmap(page_base, seg->page_size, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_PRIVATE, seg->fd,
                   (off_t)(page_base - seg->shared_base_va));
     
@@ -815,11 +838,13 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         
     }
     
+#ifdef PRIVATE_MAPPING_NOT_PRIVATE
     // Some systems evidently allow changes by other processes to be reflected in private mappings.
     // To prevent that (hopefully!) we modify the page (without really changing anything) to 
     // invoke the "copy-on-write" semantics and really make a private copy
     //
     *(volatile int*)page_base = defeat_optimizer((volatile int*)page_base);
+#endif
     
     if (insert_into_snapshot_list(seg, page_base, completed_transaction) != 0) {
         transaction_error_exit(0, -1);
@@ -831,7 +856,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         if (seg->transaction_id != page_table_elt->current_transaction) {
             
             if (stm_verbose & 2)
-                fprintf(stderr, "Transaction %d owns page %x while transaction %d is snapshotting it. [2]\n",
+                fprintf(stderr, "Transaction %d owns page %lx while transaction %d is snapshotting it. [2]\n",
                         page_table_elt->current_transaction, page_num, seg->transaction_id);
             collision_histo[3]++;
             transaction_error_exit(STM_COLLISION_ERROR, 1);
@@ -839,7 +864,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         } else {
 #ifdef OPTIMISTIC_LOCKING
             if (stm_verbose & 1)
-                fprintf(stderr, "Transaction %d already owns page %x [2]\n", 
+                fprintf(stderr, "Transaction %d already owns page %lx [2]\n", 
                         page_table_elt->current_transaction, page_num);
             transaction_error_exit(STM_OWNERSHIP_ERROR, -1);
 #endif
@@ -848,7 +873,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     
     if (completed_transaction != page_table_elt->completed_transaction) {
         if (stm_verbose & 2) {
-            fprintf(stderr, "Transaction %d snuck in on transaction %d on page %x during snapshot\n", 
+            fprintf(stderr, "Transaction %d snuck in on transaction %d on page %lx during snapshot\n", 
                     page_table_elt->completed_transaction, completed_transaction, page_num);
         }
         collision_histo[4]++;
@@ -952,7 +977,7 @@ int _stm_start_transaction(char *trans_name) {
 //
 static int lock_segment_pages(shared_segment *seg) {
     snapshot_list_element *sl;
-    unsigned long page_num;
+    size_t page_num;
     page_table_element *page_table_elt;
     
     if (seg->transaction_id == 0) {
@@ -1049,7 +1074,7 @@ static int write_locked_segment_pages(shared_segment *seg) {
     
     snapshot_list_element *sl;
     void *status;
-    unsigned long page_num;
+    size_t page_num;
     int result = 0;
     
     page_table_element *page_table_elt;
@@ -1057,6 +1082,8 @@ static int write_locked_segment_pages(shared_segment *seg) {
         
     // Re-map shared.
         
+
+#ifndef PER_PAGE_MMAPS
     status = mmap(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, seg->fd,
                   (off_t)0);
     if (status == (void*)-1) {
@@ -1065,6 +1092,7 @@ static int write_locked_segment_pages(shared_segment *seg) {
         set_stm_errno(STM_MMAP_ERROR);
         return -1;
     }
+#endif
     
     if (stm_verbose & 4)
         fprintf(stderr, "Transaction %d [", seg->transaction_id);
@@ -1081,12 +1109,26 @@ static int write_locked_segment_pages(shared_segment *seg) {
             if (stm_verbose & 4)
                 fprintf(stderr, " %lx", page_num);
 
+#ifdef PER_PAGE_MMAPS
+            status = mmap(sl->original_page_va, seg->page_size, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, seg->fd,
+                          (off_t)(sl->original_page_va - seg->shared_base_va));
+            if (status == (void*)-1) {
+                if (stm_verbose & 1)
+                    perror("write_locked_pages: mmap error");
+                set_stm_errno(STM_MMAP_ERROR);
+                return -1;
+            }
+#endif
             page_table_elt->completed_transaction = seg->transaction_id;
             
             // copy the temporarily saved, modified pages back into the right places
             //
             memcpy(sl->original_page_va, sl->original_page_snapshot, seg->page_size);
             
+#ifdef PER_PAGE_MMAPS
+            if (seg->default_prot_flags != (PROT_READ|PROT_WRITE))
+                mprotect(sl->original_page_va, seg->page_size, seg->default_prot_flags);
+#endif
         }
                 
         if (page_table_elt->current_transaction == seg->transaction_id) {
@@ -1097,7 +1139,6 @@ static int write_locked_segment_pages(shared_segment *seg) {
             
             page_table_elt->current_transaction = 0;    
         }
-        
     }
     
     if (stm_verbose & 4)
@@ -1105,8 +1146,10 @@ static int write_locked_segment_pages(shared_segment *seg) {
 
     // re-protect the segment to be whatever it is supposed to be between transactions
 
+#ifndef PER_PAGE_MMAPS
     if (seg->default_prot_flags != (PROT_READ|PROT_WRITE))
         mprotect(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags);
+#endif
     
     free_snapshot_list(seg);
     
