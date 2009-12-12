@@ -32,40 +32,64 @@
 
 #include "AVLtree.hpp"
 
+#if 0
+// There's a built-in "placement" operator new that does this already.
+void *AVLtreeNode::operator new(size_t size, void *base)
+{
+    return base;
+}
+#endif
                         
-void (*AVLuserHook)(AVLtreeNode*);
+void (*AVLuserHook)(AVLtreeNode *);
 
 /* 
     Set the depth of a tree node, assuming the child nodes have correct depths.
  */
-static void setDepth(AVLtreeNode* t) {
+
+#if 0
+void AVLtreeNode::setDepth()
+{
+    int ldepth = !!left? left->depth : 0;
+    int rdepth = !!right? right->depth : 0;
+    
+    depth = (((ldepth > rdepth)? ldepth : rdepth) + 1);
+    if (AVLuserHook)
+        (*AVLuserHook)(this);
+    if (!!parent)
+        parent.get()->setDepth();
+}
+#endif
+
+
+static void setDepth(offset_ptr<AVLtreeNode> t) {
+    
     int ldepth = !!t->left? t->left->depth : 0;
     int rdepth = !!t->right? t->right->depth : 0;
-        
+    
     t->depth = (((ldepth > rdepth)? ldepth : rdepth) + 1);
     if (AVLuserHook)
-        (*AVLuserHook)(t);
+        (*AVLuserHook)(t.get());
     if (!!t->parent)
-        setDepth(t->parent.get());
+        setDepth(t->parent);
+    
 }
-
 
 /*
  A utility routine which adds a node "new" in place of node "old" immediately under
  node "t".  If "t" is null, the tree is re-rooted at "new".
  */
-static void newSubTree(AVLtreeNode* t, offset_ptr<AVLtreeNode> *tree_addr,
-                       AVLtreeNode* old, AVLtreeNode* _new) 
+static void newSubTree(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode> *tree_addr,
+                       offset_ptr<AVLtreeNode> old, offset_ptr<AVLtreeNode> _new) 
 {
-    if (t) {
-        if (t->left.get()==old)
+    if (!!t) {
+        if (t->left==old)
             t->left= _new;
-        else if (t->right.get()==old)
+        else if (t->right==old)
             t->right= _new;
     } else {
         *tree_addr = _new;
     }
-    if ( _new)
+    if (!! _new)
          _new->parent=t;
 }
 
@@ -75,15 +99,15 @@ static void newSubTree(AVLtreeNode* t, offset_ptr<AVLtreeNode> *tree_addr,
 /*
     Rotate the tree right at a particular node.  Used in rebalancing.   
 */
-static void rotateRight(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
-    AVLtreeNode* l = t->left.get();
-    AVLtreeNode* lr = l->right.get();
-    AVLtreeNode* p;
+static void rotateRight(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode>* tree_addr) {
+    offset_ptr<AVLtreeNode> l = t->left;
+    offset_ptr<AVLtreeNode> lr = l->right;
+    offset_ptr<AVLtreeNode> p;
     l->right = t;
     t->left = lr;
-    if (lr)
+    if (!!lr)
         lr->parent = t;
-    p = t->parent.get();
+    p = t->parent;
     t->parent = l;
      newSubTree(p, tree_addr,t,l);
     setDepth(t);
@@ -93,15 +117,15 @@ static void rotateRight(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
 /*
     Rotate the tree left at a particular node.  Used in rebalancing.
 */
-static void rotateLeft(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
-    AVLtreeNode* r = t->right.get();
-    AVLtreeNode* rl = r->left.get();
-    AVLtreeNode* p;
+static void rotateLeft(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode>* tree_addr) {
+    offset_ptr<AVLtreeNode> r = t->right;
+    offset_ptr<AVLtreeNode> rl = r->left;
+    offset_ptr<AVLtreeNode> p;
     r->left = t;
     t->right = rl;
-    if (rl)
+    if (!!rl)
         rl->parent = t;
-    p = t->parent.get();
+    p = t->parent;
     t->parent = r;
     newSubTree(p, tree_addr,t,r);
     setDepth(t);
@@ -113,7 +137,7 @@ static void rotateLeft(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
  Compute the balance factor at a node "t".  Negative result indicates
  left-heavy, positive result indicates right-heavy.
  */
-static int balance(AVLtreeNode* t) {
+static int balance(offset_ptr<AVLtreeNode> t) {
     int ldepth = !!t->left? t->left->depth : 0;
     int rdepth = !!t->right? t->right->depth : 0;
     return (rdepth - ldepth);
@@ -127,21 +151,21 @@ static int balance(AVLtreeNode* t) {
  is where the "AVL" double rotation algorithm is used.
  */
 
-static void rebalance(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
+static void rebalance(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode>* tree_addr) {
         
     int b = balance(t);
     if (b == 2) {
-        if (balance(t->right.get()) == -1)
-            rotateRight(t->right.get(), tree_addr);
+        if (balance(t->right) == -1)
+            rotateRight(t->right, tree_addr);
         rotateLeft(t, tree_addr);
     } else if (b == -2) {
-        if (balance(t->left.get()) == 1)
-            rotateLeft(t->left.get(), tree_addr);
+        if (balance(t->left) == 1)
+            rotateLeft(t->left, tree_addr);
         rotateRight(t, tree_addr);
     }
     
-    if (t && !!t->parent)
-        rebalance(t->parent.get(), tree_addr);
+    if (!!t && !!t->parent)
+        rebalance(t->parent, tree_addr);
 }
 
 /*
@@ -150,14 +174,14 @@ static void rebalance(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
  find the correct branch to insert into.  The tree is rebalanced, and possibly
  re-rooted after the insertion.
  */
-static void __addToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode> *tree_addr, AVLtreeNode* t,
-                        int (*cmp)(voidish*,voidish*), voidish*(*getKey)(voidish*))
+static void __addToTree(offset_ptr<AVLtreeNode> i, offset_ptr<AVLtreeNode> *tree_addr, offset_ptr<AVLtreeNode> t,
+                        int (*cmp)(void*,void*), void*(*getKey)(void*))
 {
         
-    if (t) {
-        if ((*cmp)((*getKey)((voidish*)i), (*getKey)((voidish*)t)) < 0) {
+    if (!!t) {
+        if ((*cmp)((*getKey)((void*)i.get()), (*getKey)((void*)t.get())) < 0) {
             if (!!t->left)
-                __addToTree(i, tree_addr, t->left.get(), cmp, getKey);
+                __addToTree(i, tree_addr, t->left, cmp, getKey);
             else {
                 t->left=i;
                 i->parent = t;
@@ -166,7 +190,7 @@ static void __addToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode> *tree_addr, AVLt
             }
         } else {
             if (!!t->right)
-                __addToTree(i, tree_addr, t->right.get(), cmp, getKey);
+                __addToTree(i, tree_addr, t->right, cmp, getKey);
             else {
                 t->right = i;
                 i->parent = t;
@@ -184,11 +208,11 @@ static void __addToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode> *tree_addr, AVLt
 
 
 void AVLaddToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode>* tree_addr,
-                  int (*cmp)(voidish*,voidish*), voidish*(*getKey)(voidish*)) {
+                  int (*cmp)(void*,void*), void*(*getKey)(void*)) {
     i->parent = i->left = i->right = NULL;
     i->depth = 0;
     
-    __addToTree(i, tree_addr, (*tree_addr).get(), cmp, getKey);
+    __addToTree(i, tree_addr, (*tree_addr), cmp, getKey);
 }
 
 
@@ -199,20 +223,20 @@ void AVLaddToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode>* tree_addr,
     rebalancing is a pain.  But it works.
 */ 
 void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
-    AVLtreeNode* moved = t->parent.get();
-    AVLtreeNode* s;
+    offset_ptr<AVLtreeNode> moved = t->parent;
+    offset_ptr<AVLtreeNode> s;
     if (!!t->left) {
         if (!!t->right) {
             /* there are two subtrees. */
 
             if (t->left->depth >= t->right->depth) {
                 /* tree is left-heavy (or balanced) */
-                s = t->left->right.get();
-                if (s) {
-                    while (!!s->right) s=s->right.get();
-                    moved = s->parent.get();
+                s = t->left->right;
+                if (!!s) {
+                    while (!!s->right) s=s->right;
+                    moved = s->parent;
                     s->parent->right=s->left;
-                    if (s->left.get()) {
+                    if (!!s->left) {
                         s->left->parent=s->parent;
                     }
                     s->left=t->left;
@@ -220,19 +244,19 @@ void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
                     // s->depth = t->depth;
 
                 } else {
-                    moved = s = t->left.get();
+                    moved = s = t->left;
                 }
                 s->right = t->right;
                 t->right->parent = s;
                 
-                newSubTree(t->parent.get(), tree_addr,t,s);
+                newSubTree(t->parent, tree_addr,t,s);
 
             } else {
                 /* tree is right-heavy */
-                s = t->right->left.get();
-                if (s) {
-                    while (!!s->left) s=s->left.get();
-                    moved = s->parent.get();
+                s = t->right->left;
+                if (!!s) {
+                    while (!!s->left) s=s->left;
+                    moved = s->parent;
                     s->parent->left=s->right;
                     if (!!s->right) {
                         s->right->parent=s->parent;
@@ -242,27 +266,27 @@ void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
                     // s->depth = t->depth;
 
                 } else {
-                    moved = s = t->right.get();
+                    moved = s = t->right;
                 }
                 s->left = t->left;
                 t->left->parent = s;
     
-                newSubTree(t->parent.get(), tree_addr,t,s);
+                newSubTree(t->parent, tree_addr,t,s);
 
             }
         } else {
             /* left subtree only */
-            newSubTree(t->parent.get(), tree_addr,t,t->left.get());
+            newSubTree(t->parent, tree_addr,t,t->left);
         }
     } else if (!!t->right) {
         /* right subtree only */
-        newSubTree(t->parent.get(), tree_addr,t,t->right.get());
+        newSubTree(t->parent, tree_addr,t,t->right);
     
     } else {
         /* no subtrees */
-        newSubTree(t->parent.get(), tree_addr,t,NULL);
+        newSubTree(t->parent, tree_addr,t,NULL);
     }
-    if(moved) {
+    if(!!moved) {
         setDepth(moved);
         rebalance(moved, tree_addr);
     }
@@ -270,10 +294,10 @@ void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
 
 
 
-AVLtreeNode* AVLsearch(AVLtreeNode* t, voidish* key, int (*cmp)(voidish*,voidish*), voidish* (*getKey)(voidish*))
+AVLtreeNode* AVLsearch(AVLtreeNode *t, void* key, int (*cmp)(void*,void*), void* (*getKey)(void*))
 {
     int x;
-    if ((x = (*cmp)((*getKey)((voidish*)t),key)) == 0) {
+    if ((x = (*cmp)((*getKey)((void*)t),key)) == 0) {
         return t;
     } else if (x < 0) {
         if (!!t->right)
@@ -290,8 +314,30 @@ AVLtreeNode* AVLsearch(AVLtreeNode* t, voidish* key, int (*cmp)(voidish*,voidish
 
 
 
-static long treesize(AVLtreeNode* t) {
-    return (1 + (!!t->left? treesize(t->left.get()) : 0) + (!!t->right? treesize(t->right.get()) : 0));
+#if 0
+AVLtreeNode* AVLsearch(AVLtreeNode *t, void* key)
+{
+    int x;
+    if ((x = t->compareToKey(key)) == 0) {
+        return t;
+    } else if (x < 0) {
+        if (!!t->right)
+            return AVLsearch(t->right.get(), key);
+        else
+            return NULL;
+    } else {
+        if (!!t->left)
+            return AVLsearch(t->left.get(), key);
+        else
+            return NULL;
+    }
+}
+#endif
+
+
+
+static long treesize(offset_ptr<AVLtreeNode> t) {
+    return (1 + (!!t->left? treesize(t->left) : 0) + (!!t->right? treesize(t->right) : 0));
     
     
 }

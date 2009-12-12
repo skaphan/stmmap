@@ -33,11 +33,21 @@
 #include <string.h>
 #include <stdlib.h>
 
+typedef char voidish;
+
 
 class segalloc_node : public AVLtreeNode {
 public:
     size_t size;
     size_t size_mask;
+    
+    // virtual int compareToKey(void *key);
+    // virtual void* nodeKey();
+    
+    segalloc_node(size_t _size) : AVLtreeNode() {
+        size = _size;
+    };
+    
 };
 
 static void set_size_mask(segalloc_node *n) {
@@ -64,18 +74,32 @@ static void set_size_mask_r(segalloc_node *a) {
         set_size_mask_r(p);
 }
     
+#if 0
+void* segalloc_node::nodeKey() {
+    return this;
+}
+
+int segalloc_node::compareToKey(void *key) {
     
+    if (this == key)
+        return 0;
+    else if ((voidish*)this < (voidish*)key)
+        return -1;
+    else {
+        return 1;
+    }
+}
+#endif
 
-
-static voidish *nodekey(voidish *n) {
+static void *nodekey(void *n) {
     return n;
 }
 
-static int nodecmp(voidish* a, voidish* b) {
+static int nodecmp(void* a, void* b) {
     
     if (a==b)
         return 0;
-    else if (a<b)
+    else if ((voidish*)a < (voidish*)b)
         return -1;
     else {
         return 1;
@@ -139,10 +163,9 @@ static void split_node(segalloc_node* t, size_t size, offset_ptr<segalloc_node>*
         set_size_mask_r(t);
         
         new_node = (segalloc_node*)((voidish*)t + t->size);
-        new_node->size = t->size;
-        
+        new(new_node) segalloc_node (t->size);          // initialize node in place
 #if 0     
-         if (AVLsearch(free_list_addr->get(), (voidish*)new_node, nodecmp, nodekey) != NULL) {
+         if (AVLsearch(free_list_addr->get(), new_node, nodecmp, nodekey) != NULL) {
             fprintf(stderr, "Already in tree!\n");
         }
 #endif  
@@ -247,7 +270,7 @@ static size_t find_potential_buddy(off_t offset, size_t buddy_size) {
         return (offset ^ buddy_size);
 }
 
-static void merge_with_buddies(voidish *base_va, segalloc_node *freed_object,
+static void merge_with_buddies(void *base_va, segalloc_node *freed_object,
                                offset_ptr<segalloc_node>* free_list_addr) {
     
     off_t offset, buddy_offset;
@@ -258,7 +281,7 @@ static void merge_with_buddies(voidish *base_va, segalloc_node *freed_object,
     
     while (1) {
         
-        offset = (voidish*)freed_object - base_va;
+        offset = (voidish*)freed_object - (voidish*)base_va;
         
         if ((buddy_offset = find_potential_buddy(offset, freed_object->size)) == -1)
             break;
@@ -266,7 +289,7 @@ static void merge_with_buddies(voidish *base_va, segalloc_node *freed_object,
         offset_ptr<segalloc_node> *ptr_to_free_list_ptr = (offset_ptr<segalloc_node>*)free_list_addr;
         
         if ((buddy_block = (segalloc_node *)AVLsearch(ptr_to_free_list_ptr->get(),
-                                                      base_va + buddy_offset, nodecmp, nodekey)) != NULL  &&
+                                                      (voidish*)base_va + buddy_offset, nodecmp, nodekey)) != NULL  &&
             buddy_block->size == freed_object->size) {
             
             size_t fsize = freed_object->size;
@@ -287,7 +310,9 @@ static void merge_with_buddies(voidish *base_va, segalloc_node *freed_object,
     }
 }
 
-static int nodes_overlap_cmp(voidish* a, voidish* b) {
+static int nodes_overlap_cmp(void* aa, void* bb) {
+    voidish *a = (voidish*)aa;
+    voidish *b = (voidish*)bb;
     
     if ((a <= b && b < a + ((segalloc_node*)a)->size) ||
         (b <= a && a < b + ((segalloc_node*)b)->size))
@@ -306,14 +331,14 @@ void seg_free(void *object_va, size_t size, void *base_va, void *free_list_addr)
     
     offset_ptr<segalloc_node> *ptr_to_free_list_ptr = (offset_ptr<segalloc_node>*)free_list_addr;
 
-    if (AVLsearch(ptr_to_free_list_ptr->get(), (voidish*)object_va, nodes_overlap_cmp, nodekey) != NULL) {
+    if (AVLsearch(ptr_to_free_list_ptr->get(), object_va, nodes_overlap_cmp, nodekey) != NULL) {
         fprintf(stderr, "seg_free: node 0x%lx already in free list!\n", (unsigned long)object_va);
         return;
     }
     
-    ((segalloc_node*)object_va)->size = block_size;
+    new(object_va) segalloc_node(block_size);   // initialize node in place
     AVLaddToTree((AVLtreeNode*)object_va, (offset_ptr<AVLtreeNode>*)free_list_addr, nodecmp, nodekey);  
-    merge_with_buddies((voidish*)base_va, (segalloc_node*)object_va, ptr_to_free_list_ptr);  
+    merge_with_buddies(base_va, (segalloc_node*)object_va, ptr_to_free_list_ptr);  
     
 }
 
@@ -331,12 +356,15 @@ void *seg_alloc_init(void *base_va, size_t size, int mode) {
         offset_ptr<AVLtreeNode> tmp_free_list = NULL;
 
         min_block_size = least_power_of_2_ge(sizeof(segalloc_node));
+        
+        // printf("min_block_size = %d, sizeof(segalloc_node) = %d\n", min_block_size, sizeof(segalloc_node));
 
         while (remaining_size >= min_block_size) {
             allocated_size = greatest_power_of_2_le(remaining_size);
             n = (segalloc_node*)va;
-            n->size = allocated_size;
-    
+            
+            new(va) segalloc_node(allocated_size);  // initialize node in place
+            
             if (first_time) {
                 AVLaddToTree(n, &tmp_free_list, nodecmp, nodekey);
                 if (seg_alloc(min_block_size, &tmp_free_list) != base_va) {
@@ -440,20 +468,20 @@ int seg_verify_tree_integrity(segalloc_node *free_list) {
 
     
     
-static void __overlap_check(segalloc_node *t, voidish *base, size_t size, voidish* lower_bound, voidish* upper_bound) {
+static void __overlap_check(segalloc_node *t, void* base, size_t size, void* lower_bound, void* upper_bound) {
 
     AVLtreeNode *tt = t;
     if (lower_bound && (base < lower_bound)) {
         fprintf(stderr, "overlapping nodes\n");
     }
     
-    if (upper_bound && ((base + size) > upper_bound)) {
+    if (upper_bound && (((voidish*)base + size) > upper_bound)) {
         fprintf(stderr, "overlapping nodes\n");
     }
     
     if (base <= (void*)t) {
         if (tt->left)
-            __overlap_check((segalloc_node*)tt->left.get(), base, size, lower_bound, (voidish*)tt);
+            __overlap_check((segalloc_node*)tt->left.get(), base, size, lower_bound, tt);
     
     } 
     if (base >= (void*)t) {
@@ -463,7 +491,7 @@ static void __overlap_check(segalloc_node *t, voidish *base, size_t size, voidis
 }
     
 
-void overlap_check(segalloc_node *t, voidish *base, size_t size) {
+void overlap_check(segalloc_node *t, void *base, size_t size) {
     __overlap_check(t, base, size, NULL, NULL);
 }
 

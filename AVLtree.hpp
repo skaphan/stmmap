@@ -38,15 +38,24 @@ public:
     offset_ptr<AVLtreeNode> left;
     offset_ptr<AVLtreeNode> right;
     int depth;
+    
+    // virtual int compareToKey(void *key) = 0;
+    // virtual void* nodeKey() = 0;
+    
+    // void *operator new(size_t size, void *base);
+    
+    AVLtreeNode() {
+        parent = left = right = NULL;
+    };
+    
 };
 
-typedef char voidish;
 
 /*
  Add a node "i" to the tree "*tree". The tree is rebalanced, and possibly
  re-rooted after the insertion (that's why the pointer-to-pointer is passed).
  */
-void AVLaddToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode>* tree_addr, int (*cmp)(voidish*,voidish*), voidish*(*getKey)(voidish*));
+void AVLaddToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode>* tree_addr, int (*cmp)(void*,void*), void*(*getKey)(void*));
 
 /* 
  Removes a node  "t" from a tree.
@@ -56,12 +65,12 @@ void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr);
 /*
  Search for a node in the tree using a user supplied comparison function, and key extractor.
  */
-AVLtreeNode* AVLsearch(AVLtreeNode* t, voidish* key, int (*cmp)(voidish*,voidish*), voidish* (*getKey)(voidish*));
+AVLtreeNode *AVLsearch(AVLtreeNode* t, void* key, int (*cmp)(void*,void*), void* (*getKey)(void*));
 
 /* 
  For "subtypes" of AVLtreeNode, there's a hook which, if set, is called on each node when the
  node's depth is being calculated.
  */
-extern void (*AVLuserHook)(AVLtreeNode*);
+extern void (*AVLuserHook)(AVLtreeNode *);
     
 
