@@ -352,7 +352,6 @@ void *seg_alloc_init(void *base_va, size_t size, int mode) {
         size_t allocated_size;
         size_t remaining_size = size;
         size_t min_block_size;
-        segalloc_node *n;   
         offset_ptr<AVLtreeNode> tmp_free_list = NULL;
 
         min_block_size = least_power_of_2_ge(sizeof(segalloc_node));
@@ -361,12 +360,11 @@ void *seg_alloc_init(void *base_va, size_t size, int mode) {
 
         while (remaining_size >= min_block_size) {
             allocated_size = greatest_power_of_2_le(remaining_size);
-            n = (segalloc_node*)va;
             
             new(va) segalloc_node(allocated_size);  // initialize node in place
             
             if (first_time) {
-                AVLaddToTree(n, &tmp_free_list, nodecmp, nodekey);
+                AVLaddToTree((segalloc_node*)va, &tmp_free_list, nodecmp, nodekey);
                 if (seg_alloc(min_block_size, &tmp_free_list) != base_va) {
                     fprintf(stderr, "seg_alloc_init:  initial allocation != base_va\n");
                     exit(-1);
@@ -375,7 +373,7 @@ void *seg_alloc_init(void *base_va, size_t size, int mode) {
                 *(offset_ptr<AVLtreeNode> *)base_va = tmp_free_list;      // move the tree root to the base of the segment
                 first_time = 0;
             } else {
-                AVLaddToTree(n, (offset_ptr<AVLtreeNode>*)base_va, nodecmp, nodekey);
+                AVLaddToTree((segalloc_node*)va, (offset_ptr<AVLtreeNode>*)base_va, nodecmp, nodekey);
             }
 
             va = (voidish*)va + allocated_size;
@@ -383,7 +381,7 @@ void *seg_alloc_init(void *base_va, size_t size, int mode) {
         }
     }
     
-    return base_va;
+    return base_va;             // this is now the address of the offset_ptr that points to the free list.
 }
 
 static int verify_tree_integrity(AVLtreeNode *tt, AVLtreeNode* parent, void* lower_bound, void* upper_bound) {
