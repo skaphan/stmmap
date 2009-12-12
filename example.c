@@ -82,6 +82,7 @@ void alloc_test(struct shared_segment *seg, int n_iterations) {
     stm_commit_transaction("foo");
 }
 
+#define SEGSIZE (1<<25)
 
 void *thread_fn(void *arg)
 {
@@ -89,11 +90,10 @@ void *thread_fn(void *arg)
     int prot_flags = PROT_NONE;
     // int prot_flags = PROT_READ|PROT_WRITE;
     struct shared_segment *seg;
-    int segsize = 1<<23;  
     
     stm_init_thread_locals();
     
-    if ((seg = stm_open_shared_segment("/tmp/stmtest12345", segsize, (void*) 0,
+    if ((seg = stm_open_shared_segment("/tmp/stmtest12345", SEGSIZE, (void*) 0,
                                        prot_flags)) == NULL)
         exit (-1);
     
@@ -113,13 +113,12 @@ int main (int argc, const char * argv[]) {
     
     
     stm_init(0x7);              // blab a lot - see API and change if you like.
-
+    
     if (argv[1] && argv[1][0] == 'i') {
         int prot_flags = PROT_NONE;
         struct shared_segment *seg;
-        int segsize = 1<<23;   
-                
-        if ((seg = stm_open_shared_segment("/tmp/stmtest12345", segsize, (void*) 0,
+        
+        if ((seg = stm_open_shared_segment("/tmp/stmtest12345", SEGSIZE, (void*) 0,
                                            prot_flags)) == NULL)
             exit (-1);
         printf("shared segment base = 0x%lx\n", (unsigned long)stm_segment_base(seg));
