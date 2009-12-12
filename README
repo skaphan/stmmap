@@ -50,6 +50,7 @@ Example.c gives a very simple example of how to use this package.  In fact,
 this is what I used to debug it.
 
 
+
 THEORY OF OPERATION
 ===================
 
@@ -154,6 +155,53 @@ being the body of a loop, that you don't know how many times is going to be
 executed. Only information in the shared segments is managed transactionally.
 
 
+ISSUES
+======
+
+
+Is Private Mapping Private?
+---------------------------
+
+stmmap depends heavily on mmap().  Some features of mmap() are implemented differently
+on different systems.  Of particular concern is the behavior of private mapping, which
+you get with the MAP_PRIVATE flag.  stmmap() uses this when a transaction accesses
+pages in memory.  Some systems treat MAP_PRIVATE as a true private mapping, whether
+reading or writing.  Some, on the other hand, do not treat the mapping as truly private
+until there is a write, at which time they make a private copy.  Here, for example,
+is a quote from http://docs.hp.com/en/5992-3373/ch10s03.html:
+
+"In case of mmap(2), if MAP_PRIVATE mapping is created for a file for which MAP_SHARED
+exists, a separate copy of the page is created for MAP_PRIVATE only when it first
+writes to the page. As long as MAP_PRIVATE reads, it shares the page with MAP_SHARED
+mapping. That is, updates made by shared mapping will be visible to private mapping
+until private mapping writes. This change makes HP-UX mmap(2) compliant with industry
+standard, thus helping application portability."
+
+Clearly it would be better if there was explicit control of this issue, with a way
+of explicitly requesting either copy-on-write behavior or true private mapping.  If
+the system you are compiling on does not provide true private mapping, you must define
+the symbol PRIVATE_MAPPING_NOT_PRIVATE when compiling stm.c.  This causes privately mapped
+pages to immediately perform a write of their own contents into themselves, invoking
+copy-on-write behavior.  This is not done unless it is necessary, because it is somewhat
+costly.
+
+
+Debugging
+---------
+
+stmmap makes liberal use of the SIGBUS signal.  This can make it difficult to debug
+programs which use stmmap unless you can get your debugger to pass through the SIGBUS
+signals without getting all confused about it.  gdb, in particular, requires some 
+coaxing.  There is a bit of code in example.c that was needed to debug while using
+stmmap on Mac OS X.  It is likely to be needed on any Mach system.  Also, when using
+gdb on any system, you should type this line before your code calls on anything in stmmap:
+
+    handle SIGBUS nostop noprint pass
+    
+
+
+
+
 PROS AND CONS
 =============
 
@@ -197,6 +245,10 @@ avoid some memory-to-memory copying in the stmmap implementation.
 Shared memory mapping that is backed only by swap space and not by a file could
 also be a good thing, but there needs to be some way to name it.  (Mac OS has
 this).
+
+Someone should fix the standard behavior of mmap() so that there is a way to get
+either copy-on-write or private mapping, and not to confuse the two as appears to
+be the present situation.
 
 
 ACKNOWLEDGEMENTS
