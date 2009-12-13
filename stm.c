@@ -37,6 +37,9 @@
 #include "atomic-compat.h"
 #include "stm.h"
 
+#ifdef __APPLE__
+#define PRIVATE_MAPPING_IS_PRIVATE
+#endif
 
 
 // This is here for experimental purposes.  You probably do not want to define it -
@@ -759,7 +762,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     struct sigaction sa;
     
     sa.sa_flags = 0;
-    sa.sa_mask = 0;
+    sigemptyset(&sa.sa_mask);
     sa.sa_handler = SIG_DFL;
     
     if (transaction_stack() == NULL) {
@@ -923,7 +926,7 @@ int stm_init(int verbose) {
     set_stm_errno(0);
     
     sa.sa_flags = SA_SIGINFO;
-    sa.sa_mask = 0;
+    sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = signal_handler;
     
     if ((status = sigaction(SIGBUS, &sa, &saved_sigaction)) != 0) {     
