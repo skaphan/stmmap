@@ -164,9 +164,9 @@ Is Private Mapping Private?
 
 stmmap depends heavily on mmap().  Some features of mmap() are implemented differently
 on different systems.  Of particular concern is the behavior of private mapping, which
-you get with the MAP_PRIVATE flag.  stmmap() uses this when a transaction accesses
+you get with the MAP_PRIVATE flag.  stmmap uses this when a transaction accesses
 pages in memory.  Some systems treat MAP_PRIVATE as a true private mapping, whether
-reading or writing.  Some, on the other hand, do not treat the mapping as truly private
+reading or writing.  Some, on the other hand, treat the mapping as if it were shared
 until there is a write, at which time they make a private copy.  Here, for example,
 is a quote from http://docs.hp.com/en/5992-3373/ch10s03.html:
 
@@ -177,13 +177,15 @@ mapping. That is, updates made by shared mapping will be visible to private mapp
 until private mapping writes. This change makes HP-UX mmap(2) compliant with industry
 standard, thus helping application portability."
 
+
 Clearly it would be better if there was explicit control of this issue, with a way
 of explicitly requesting either copy-on-write behavior or true private mapping.  If
-the system you are compiling on does not provide true private mapping, you must define
-the symbol PRIVATE_MAPPING_NOT_PRIVATE when compiling stm.c.  This causes privately mapped
-pages to immediately perform a write of their own contents into themselves, invoking
-copy-on-write behavior.  This is not done unless it is necessary, because it is somewhat
-costly.
+the system you are compiling provides true private mapping, you may define
+the symbol PRIVATE_MAPPING_IS_PRIVATE when compiling stm.c.  Otherwise, when pages
+are mapped PRIVATE as they are accessed in a transaction, they immediately perform
+a write of their own contents into themselves, invoking copy-on-write behavior.
+This is somewhat costly so if you can get away with it (for example, on Mac OSX),
+you might want to define PRIVATE_MAPPING_IS_PRIVATE.
 
 
 Debugging
