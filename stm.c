@@ -37,6 +37,10 @@
 #include "atomic-compat.h"
 #include "stm.h"
 
+
+
+// This is here for experimental purposes.  You probably do not want to define it -
+// It appears to negatively affect performance.
 #undef PER_PAGE_MMAPS
 
 #define MAX_ACTIVE_TRANSACTIONS 100
@@ -120,6 +124,8 @@ typedef struct shared_segment {
     
     transaction_id_t transaction_id;                        // current transaction ID, if any 
     struct snapshot_list_element *snapshot_list;            // list of snapshotted pages accessed during a transaction
+    struct snapshot_list_element *snapshot_pool;            // place to put snapshot list elements we're done with instead
+                                                            // of freeing and reallocating later.
     
     int n_prior_active_transactions;                        // number of transactions active at the time the current one
                                                             // started.
@@ -462,14 +468,31 @@ void print_collision_histo() {
 
 
 
-static void free_snapshot_list(shared_segment *seg) {   
-    snapshot_list_element *sl;
-    for ( ; seg->snapshot_list; seg->snapshot_list = sl) {
-        sl = seg->snapshot_list->next;
-        free(seg->snapshot_list->original_page_snapshot);
-        free(seg->snapshot_list);       
+static void free_snapshot_list(shared_segment *seg) {
+    
+    snapshot_list_element *sl, *prev = NULL;
+    for (sl = seg->snapshot_list; sl; prev = sl, sl = sl->next) {
+        sl->original_page_va = NULL;
+        sl->snapshot_transaction_id = 0;
+        sl->page_dirty = 0;
     }
+    
+    if (prev != NULL)
+        prev->next = seg->snapshot_pool;
+    seg->snapshot_pool = seg->snapshot_list;
+    seg->snapshot_list = NULL;
+        
 }
+
+static void free_snapshot_pool(shared_segment *seg) {
+    snapshot_list_element *sl;
+    for ( ; seg->snapshot_pool; seg->snapshot_pool = sl) {
+        sl = seg->snapshot_pool->next;
+        if (seg->snapshot_pool->original_page_va)
+            free(seg->snapshot_pool->original_page_snapshot);
+        free(seg->snapshot_pool);       
+    }
+}    
 
 
 static void abort_transaction_on_segment(shared_segment *seg) {
@@ -639,20 +662,24 @@ static int insert_into_snapshot_list(shared_segment *seg, void *va, transaction_
         return -1;
     }
     
-    
-    if ((new_elt = calloc(1, sizeof(snapshot_list_element))) == NULL) {
-        set_stm_errno(STM_ALLOC_ERROR);
-        return -1;
+    if ((new_elt = seg->snapshot_pool) != NULL) {
+        seg->snapshot_pool = new_elt->next;
+        new_elt->next = NULL;
+        
+    } else {
+        if ((new_elt = calloc(1, sizeof(snapshot_list_element))) == NULL) {
+            set_stm_errno(STM_ALLOC_ERROR);
+            return -1;
+        }
+        
+        if ((new_elt->original_page_snapshot = malloc(seg->page_size)) == NULL) {
+            set_stm_errno(STM_ALLOC_ERROR);
+            return -1;
+        }        
     }
     
-    new_elt->original_page_va = va;
-    if ((new_elt->original_page_snapshot = malloc(seg->page_size)) == NULL) {
-        set_stm_errno(STM_ALLOC_ERROR);
-        return -1;
-    }
-    
-    new_elt->page_dirty = 0;
-    
+    new_elt->original_page_va = va;        
+    new_elt->page_dirty = 0;    
     new_elt->snapshot_transaction_id = trans_id;
     
     memcpy(new_elt->original_page_snapshot, va, seg->page_size);
@@ -838,7 +865,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         
     }
     
-#ifdef PRIVATE_MAPPING_NOT_PRIVATE
+#ifndef PRIVATE_MAPPING_IS_PRIVATE
     // Some systems evidently allow changes by other processes to be reflected in private mappings.
     // To prevent that (hopefully!) we modify the page (without really changing anything) to 
     // invoke the "copy-on-write" semantics and really make a private copy
@@ -1268,6 +1295,8 @@ void stm_close_shared_segment(shared_segment *seg) {
     
     if (seg->filename) free(seg->filename);
     if (seg->metadata_filename) free(seg->metadata_filename);
+    free_snapshot_pool(seg);
+    
     free(seg);
 }
 
