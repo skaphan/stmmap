@@ -30,23 +30,47 @@
 
 
 
-int32_t atomic_increment_32(int32_t *addr) {    
-    return OSAtomicIncrement32Barrier(addr);    
+int32_t atomic_increment_32(int32_t *addr) {  
+    
+#ifdef USE_ATOMIC_BUILTINS
+    return __sync_add_and_fetch (addr, 1);
+#else
+    return OSAtomicIncrement32Barrier(addr);  
+#endif
+    
 }
 
 int32_t atomic_decrement_32(int32_t *addr) {    
+#ifdef USE_ATOMIC_BUILTINS
+    return __sync_add_and_fetch (addr, -1);
+#else
     return OSAtomicDecrement32Barrier(addr);    
+#endif
 }
 
 int32_t atomic_compare_and_swap_32(int32_t oldval, int32_t newval, int32_t *addr) { 
-    return OSAtomicCompareAndSwap32Barrier(oldval, newval, addr);   
+#ifdef USE_ATOMIC_BUILTINS
+    return __sync_bool_compare_and_swap (addr, oldval, newval);
+#else
+    return OSAtomicCompareAndSwap32Barrier(oldval, newval, addr); 
+#endif
 }
 
 
 void atomic_spin_lock_lock(atomic_lock *lock) {
+#ifdef USE_ATOMIC_BUILTINS    
+    __sync_lock_test_and_set (lock, 1);
+#else
     OSSpinLockLock(lock);
+#endif
 }
 
 void atomic_spin_lock_unlock(atomic_lock *lock) {
+#ifdef USE_ATOMIC_BUILTINS    
+    __sync_lock_release (lock);
+
+#else
     OSSpinLockUnlock(lock);
+#endif
+    
 }

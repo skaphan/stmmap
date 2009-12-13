@@ -25,11 +25,24 @@
  
  */
 
+#define USE_ATOMIC_BUILTINS
 
+
+#ifdef USE_ATOMIC_BUILTINS
+
+#include <stdint.h>
+
+typedef int32_t atomic_lock;
+
+#else
 
 #include <libkern/OSAtomic.h>
-
 typedef OSSpinLock atomic_lock;
+
+#endif
+
+
+
 
 void atomic_spin_lock_lock(atomic_lock *lock);
 
