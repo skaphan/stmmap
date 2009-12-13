@@ -41,6 +41,11 @@
 #define PRIVATE_MAPPING_IS_PRIVATE
 #endif
 
+// On some systems this will be SIGSEGV
+//
+#define PAGE_ACCESS_SIGNAL SIGBUS
+
+
 
 // This is here for experimental purposes.  You probably do not want to define it -
 // It appears to negatively affect performance.
@@ -769,7 +774,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         if (stm_verbose & 1)
             fprintf(stderr, "signal_handler: virtual address %lx referenced outside transaction\n",
                     (unsigned long)si->si_addr);
-        sigaction(SIGBUS, &sa, 0);
+        sigaction(PAGE_ACCESS_SIGNAL, &sa, 0);
         transaction_error_exit(STM_ACCESS_ERROR, -1);       
         return;
     }
@@ -780,7 +785,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         if (stm_verbose & 1)
             fprintf(stderr, "signal_handler: virtual address %lx not found in shared segment\n",
                     (unsigned long)si->si_addr);
-        sigaction(SIGBUS, &sa, 0);
+        sigaction(PAGE_ACCESS_SIGNAL, &sa, 0);
         transaction_error_exit(STM_ACCESS_ERROR, -1);               
         return;
     }
@@ -788,7 +793,7 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     if (seg->transaction_id == 0) {
         if (stm_verbose & 1)
             fprintf(stderr, "signal_handler:  signal received outside transaction\n");
-        sigaction(SIGBUS, &sa, 0);
+        sigaction(PAGE_ACCESS_SIGNAL, &sa, 0);
         transaction_error_exit(STM_ACCESS_ERROR, -1);               
     }
     
@@ -929,7 +934,7 @@ int stm_init(int verbose) {
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = signal_handler;
     
-    if ((status = sigaction(SIGBUS, &sa, &saved_sigaction)) != 0) {     
+    if ((status = sigaction(PAGE_ACCESS_SIGNAL, &sa, &saved_sigaction)) != 0) {     
         if (stm_verbose & 1)
             fprintf(stderr, "sigaction status = %d\n", status);
         set_stm_errno(STM_SIGNAL_ERROR);
@@ -1308,7 +1313,7 @@ void stm_close()
     shared_segment *s;
     while ((s = shared_segment_list()) != NULL)
         stm_close_shared_segment(s);
-    sigaction(SIGBUS, &saved_sigaction, 0);
+    sigaction(PAGE_ACCESS_SIGNAL, &saved_sigaction, 0);
 }
 
 
