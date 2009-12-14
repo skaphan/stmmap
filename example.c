@@ -8,6 +8,8 @@
 #include "segalloc.h"       // just for seg_verify_tree_integrity()
 #include "stmalloc.h"
 
+// This is normally supplied, when needed from the Makefile.
+// #define THREADS
 
 #ifdef __APPLE__
 
@@ -127,7 +129,7 @@ int main (int argc, const char * argv[]) {
         seg_print_free_list(stm_free_list(seg));
         stm_commit_transaction("foob");
     } else {
-#if 0   
+#ifndef THREADS
         thread_fn(NULL);
 #else
         void *thread1_val;
