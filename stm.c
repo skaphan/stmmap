@@ -41,9 +41,11 @@
 #define PRIVATE_MAPPING_IS_PRIVATE
 #endif
 
-// On some systems this will be SIGSEGV
+// On some systems this will be SIGSEGV.  On MacOS, for example, it must be SIGBUS.
 //
-#define PAGE_ACCESS_SIGNAL SIGBUS
+#ifndef PAGE_ACCESS_SIGNAL
+#define PAGE_ACCESS_SIGNAL SIGSEGV
+#endif
 
 
 
