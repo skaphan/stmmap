@@ -3,59 +3,48 @@ IDIR =/usr/local/boost_1_41_0
 
 CC=gcc
 CPP=g++
-CPPFLAGS = -I$(IDIR)
+
 
 # Some systems need SIGSEGV, others, like Mac OS, need SIGBUS
 # To do:  figure out how to autoconfigure this.
 #
 CFLAGS = -DPAGE_ACCESS_SIGNAL=SIGSEGV
+CPLUSPLUSFLAGS = $(CFLAGS)  -DTHREADS -I$(IDIR)
 
 LIBS=-lpthread
 
-OBJ = stm.o stmalloc.o atomic-compat.o AVLtree.o segalloc.o example.o
+OBJ = stm.o stmalloc.o atomic-compat.o
 
-CPPSRC = AVLtree.cpp segalloc.cpp
+NOBJ = AVLtree.o segalloc.o example.o
 
-CSRC = AVLtree.c segalloc.c
+THOBJ = segalloc.th.o AVLtree.th.o example.th.o 
 
-SRC = stm.c stmalloc.c atomic-compat.c example.c
 
-all: stmmap1 stmmap2
+all: stmtest1 stmtest2
 
 
 # this is a single-threaded test program that uses absolute pointers
-# in the shared segment
+# in the shared segment.  Uses pthreads library for thread local storage
+# which is the same in both single- and multi-threaded versions.
 #
-stmmap1: c-objs example1 $(OBJ)
-	$(CC) -o $@ $(OBJ) $(LIBS)
+stmtest1: $(OBJ) $(NOBJ)
+	$(CC) -o $@ $(OBJ) $(NOBJ) $(LIBS)
 
 # this is a multi-threading test program that uses position-independent
-# relative pointers in the shared segment
+# relative pointers in the shared segment.
 #
-stmmap2: cpp-objs example2 $(OBJ)
-	$(CPP) -o $@ $(OBJ) $(LIBS)
+stmtest2: $(OBJ) $(THOBJ)
+	$(CPP) -o $@ $(OBJ) $(THOBJ) $(LIBS)
+	
+%.o: %.c Makefile
+	$(CC) -c $(CFLAGS) $< -o $@
 
-.PHONY : c-objs cpp-objs clean-objs 
+# The two following rules must appear in the order they appear here.
+%.th.o: %.cpp Makefile 
+	$(CPP) -c $(CPLUSPLUSFLAGS) $< -o $@
 
-cpp-objs: clean-cppobjs example2
-	$(CPP) -c $(CPPSRC) $(CPPFLAGS)
-
-c-objs: clean-objs example1
-	$(CC) -c $(CSRC)  $(CFLAGS)
-
-
-example1:
-	$(CC) -c example.c  $(CFLAGS)
-
-example2:
-	$(CC) -c example.c  $(CFLAGS) -DTHREADS
-
-
-clean-objs:
-	-rm segalloc.o AVLtree.o example.o
-
-clean-cppobjs:
-	-rm segalloc.o AVLtree.o example.o
+%.th.o: %.c Makefile
+	$(CC) -c $(CFLAGS) $< -o $@
 
 .PHONY: clean
 
