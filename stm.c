@@ -37,6 +37,47 @@
 #include "atomic-compat.h"
 #include "stm.h"
 
+
+/*
+ 
+ There are at least two versions of the semantics of mmap() out there.
+ PRIVATE_MAPPING_IS_PRIVATE should be defined on systems where when we use mmap()
+ with MAP_PRIVATE, our version of the file will not reflect any modifications made by
+ other processes or threads.   
+ 
+ On systems where writes by other processes or threads are visible in pages mapped
+ with MAP_PRIVATE that have not been written to, PRIVATE_MAPPING_IS_PRIVATE should NOT
+ be defined.
+ 
+ On all systems, MAP_PRIVATE implies that mapped pages we write to are private at
+ least from the first write onward.
+ 
+ If PRIVATE_MAPPING_IS_PRIVATE is defined:
+ 
+ - shared memory segments are mapped with MAP_SHARED
+ - when transactions start the memory is protected with PROT_NONE (no access).
+ - when pages are touched in transactions, they are mapped MAP_PRIVATE and
+    PROT_READ|PROT_WRITE (any access allowed).  
+ - on commit the shared segment is mapped MAP_SHARED and the modified pages
+    are copied into it.
+ - then the shared segment is protected with the user-specified protection between
+    transactions.
+ 
+ If PRIVATE_MAPPING_IS_PRIVATE is NOT defined:
+ 
+ - "shared" memory segments are mapped with MAP_PRIVATE
+ - when transactions start the memory is protected with PROT_NONE (no access).
+ - when pages are touched in transactions, they are not remapped, but are
+    protected with PROT_READ|PROT_WRITE (any access allowed).  Because of
+    copy-on-write semantics with MAP_PRIVATE, we now have a private copy of the
+    written page that will not reflect changes made by other processes.
+ - on commit the shared segment is mapped MAP_SHARED and the modified pages
+    are copied into it.
+ - then the shared segment is mapped MAP_PRIVATE and protected with the
+    user-specified protection between transactions.
+ 
+ */
+
 #ifdef __APPLE__
 #define PRIVATE_MAPPING_IS_PRIVATE
 #endif
@@ -400,14 +441,12 @@ shared_segment *stm_open_shared_segment(char *filename, size_t segment_size, voi
     seg->default_prot_flags = prot_flags;
     
 
+#ifdef PRIVATE_MAPPING_IS_PRIVATE
     mmap_flags = MAP_SHARED;
-    
-    
-#undef KLUGE
-#ifdef KLUGE
+#else
     mmap_flags = MAP_PRIVATE;
 #endif
-    
+        
     if (requested_va != NULL)
         mmap_flags |= MAP_FIXED;
     
@@ -564,11 +603,21 @@ static void abort_transaction_on_segment(shared_segment *seg) {
     // reprotect *all* pages with the default inter-transaction protection.
     
 #ifndef PER_PAGE_MMAPS
+    
+#ifdef PRIVATE_MAPPING_IS_PRIVATE 
     if (seg->default_prot_flags == PROT_NONE) {
         status = (void*)(long)mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_NONE);
-    } else   
-    {    
-        status = mmap(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags, MAP_FIXED|MAP_SHARED, seg->fd, 
+    } else
+#endif // ifdef PRIVATE_MAPPING_IS_PRIVATE
+        
+    {
+        int mmap_flags;
+#ifdef PRIVATE_MAPPING_IS_PRIVATE
+        mmap_flags = MAP_FIXED|MAP_SHARED;
+#else
+        mmap_flags = MAP_FIXED|MAP_PRIVATE;
+#endif
+        status = mmap(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags, mmap_flags, seg->fd, 
                       (off_t)0);
     }
     if (status == (void*)-1)
@@ -861,9 +910,11 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
     }
     
         
+          
+#ifdef PRIVATE_MAPPING_IS_PRIVATE
     // Change from shared to private mapping, and make the page readable and writable.
     //
-           
+ 
     status = mmap(page_base, seg->page_size, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_PRIVATE, seg->fd,
                   (off_t)(page_base - seg->shared_base_va));
     
@@ -875,7 +926,19 @@ static void signal_handler(int sig, siginfo_t *si, void *foo) {
         
     }
     
-#ifndef PRIVATE_MAPPING_IS_PRIVATE
+#else
+    // Private mapping is NOT private, so we have the whole segment mapped private.
+    // By writing into a page we get a private copy of it which is all we need.
+    
+    status = (void*)(long)mprotect(page_base, seg->page_size, PROT_READ|PROT_WRITE);
+    if (status == (void*)-1) {
+        if (stm_verbose & 1)
+            perror("signal_handler: mprotect error in sig handler");
+        transaction_error_exit(STM_MMAP_ERROR, -1);
+        return;
+        
+    }
+    
     // Some systems evidently allow changes by other processes to be reflected in private mappings.
     // To prevent that (hopefully!) we modify the page (without really changing anything) to 
     // invoke the "copy-on-write" semantics and really make a private copy
@@ -968,21 +1031,21 @@ static int start_transaction_on_segment(shared_segment *seg) {
     add_active_transaction(seg);
 
     atomic_spin_lock_unlock(&seg->segment_transaction_data->transaction_lock);
-
-    if (seg->default_prot_flags != PROT_NONE) {
-        // We only need to change the segment's protection if, in between transactions
-        // it was accessible at all.
-
-        status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_NONE);
-        // status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE);
         
+    if (seg->default_prot_flags != PROT_NONE) {
+        
+        status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_NONE);
+    
+        // status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE);
+    
         if (status == -1) {
             if (stm_verbose & 1)
                 perror("start_transaction: mprotect error");
             set_stm_errno(STM_MMAP_ERROR);
-            return -1;
+                return -1;
         }
-    }        
+    }
+        
     return 0;
 }
 
@@ -1188,9 +1251,25 @@ static int write_locked_segment_pages(shared_segment *seg) {
     // re-protect the segment to be whatever it is supposed to be between transactions
 
 #ifndef PER_PAGE_MMAPS
+    
+#ifdef PRIVATE_MAPPING_IS_PRIVATE    
     if (seg->default_prot_flags != (PROT_READ|PROT_WRITE))
-        mprotect(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags);
+        status = (void*)(long)mprotect(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags);
+    else
+        status = 0;
+
+#else    
+    
+    status = mmap(seg->shared_base_va, seg->shared_seg_size, seg->default_prot_flags, MAP_FIXED|MAP_PRIVATE, seg->fd, 
+                    (off_t)0);
+
 #endif
+    if (status == (void*)-1) {
+        perror("write_locked_segment_pages: mmap error");
+        set_stm_errno(STM_MMAP_ERROR);
+        result = -1;
+    }
+#endif      // ifndef PER_PAGE_MMAPS
     
     free_snapshot_list(seg);
     
