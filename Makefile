@@ -1,5 +1,6 @@
 
-IDIR =/usr/local/boost_1_41_0
+#IDIR =/usr/local/boost_1_41_0
+IDIR = ../boost_1_41_0
 
 CC=gcc
 CPP=g++
@@ -8,8 +9,14 @@ CPP=g++
 # Some systems need SIGSEGV, others, like Mac OS, need SIGBUS
 # To do:  figure out how to autoconfigure this.
 #
+THREADFLAGS = -DTHREADS
+
 CFLAGS = -DPAGE_ACCESS_SIGNAL=SIGSEGV
-CPLUSPLUSFLAGS = $(CFLAGS)  -DTHREADS -I$(IDIR)
+# Alternatives for CFLAGS:
+#CFLAGS = -DPAGE_ACCESS_SIGNAL=SIGBUS -DPRIVATE_MAPPING_IS_PRIVATE
+
+
+CPLUSPLUSFLAGS = $(CFLAGS) -I$(IDIR)
 
 LIBS=-lpthread
 
@@ -41,10 +48,10 @@ stmtest2: $(OBJ) $(THOBJ)
 
 # The two following rules must appear in the order they appear here.
 %.th.o: %.cpp Makefile 
-	$(CPP) -c $(CPLUSPLUSFLAGS) $< -o $@
+	$(CPP) -c $(CPLUSPLUSFLAGS) $(THREADFLAGS) $< -o $@
 
 %.th.o: %.c Makefile
-	$(CC) -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $(THREADFLAGS) $< -o $@
 
 .PHONY: clean
 
