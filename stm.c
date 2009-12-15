@@ -968,17 +968,21 @@ static int start_transaction_on_segment(shared_segment *seg) {
     add_active_transaction(seg);
 
     atomic_spin_lock_unlock(&seg->segment_transaction_data->transaction_lock);
+
+    if (seg->default_prot_flags != PROT_NONE) {
+        // We only need to change the segment's protection if, in between transactions
+        // it was accessible at all.
+
+        status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_NONE);
+        // status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE);
         
-    status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_NONE);
-    // status = mprotect(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE);
-    
-    if (status == -1) {
-        if (stm_verbose & 1)
-            perror("start_transaction: mprotect error");
-        set_stm_errno(STM_MMAP_ERROR);
-        return -1;
-    }
-        
+        if (status == -1) {
+            if (stm_verbose & 1)
+                perror("start_transaction: mprotect error");
+            set_stm_errno(STM_MMAP_ERROR);
+            return -1;
+        }
+    }        
     return 0;
 }
 
