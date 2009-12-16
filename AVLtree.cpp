@@ -49,13 +49,13 @@ void (*AVLuserHook)(AVLtreeNode *);
 #if 0
 void AVLtreeNode::setDepth()
 {
-    int ldepth = !!left? left->depth : 0;
-    int rdepth = !!right? right->depth : 0;
+    int ldepth = left? left->depth : 0;
+    int rdepth = right? right->depth : 0;
     
     depth = (((ldepth > rdepth)? ldepth : rdepth) + 1);
     if (AVLuserHook)
         (*AVLuserHook)(this);
-    if (!!parent)
+    if (parent)
         parent.get()->setDepth();
 }
 #endif
@@ -63,13 +63,13 @@ void AVLtreeNode::setDepth()
 
 static void setDepth(offset_ptr<AVLtreeNode> t) {
     
-    int ldepth = !!t->left? t->left->depth : 0;
-    int rdepth = !!t->right? t->right->depth : 0;
+    int ldepth = t->left? t->left->depth : 0;
+    int rdepth = t->right? t->right->depth : 0;
     
     t->depth = (((ldepth > rdepth)? ldepth : rdepth) + 1);
     if (AVLuserHook)
         (*AVLuserHook)(t.get());
-    if (!!t->parent)
+    if (t->parent)
         setDepth(t->parent);
     
 }
@@ -81,7 +81,7 @@ static void setDepth(offset_ptr<AVLtreeNode> t) {
 static void newSubTree(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode> *tree_addr,
                        offset_ptr<AVLtreeNode> old, offset_ptr<AVLtreeNode> _new) 
 {
-    if (!!t) {
+    if (t) {
         if (t->left==old)
             t->left= _new;
         else if (t->right==old)
@@ -89,7 +89,7 @@ static void newSubTree(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode> *tree_
     } else {
         *tree_addr = _new;
     }
-    if (!! _new)
+    if ( _new)
          _new->parent=t;
 }
 
@@ -105,7 +105,7 @@ static void rotateRight(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode>* tree
     offset_ptr<AVLtreeNode> p;
     l->right = t;
     t->left = lr;
-    if (!!lr)
+    if (lr)
         lr->parent = t;
     p = t->parent;
     t->parent = l;
@@ -123,7 +123,7 @@ static void rotateLeft(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode>* tree_
     offset_ptr<AVLtreeNode> p;
     r->left = t;
     t->right = rl;
-    if (!!rl)
+    if (rl)
         rl->parent = t;
     p = t->parent;
     t->parent = r;
@@ -138,8 +138,8 @@ static void rotateLeft(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode>* tree_
  left-heavy, positive result indicates right-heavy.
  */
 static int balance(offset_ptr<AVLtreeNode> t) {
-    int ldepth = !!t->left? t->left->depth : 0;
-    int rdepth = !!t->right? t->right->depth : 0;
+    int ldepth = t->left? t->left->depth : 0;
+    int rdepth = t->right? t->right->depth : 0;
     return (rdepth - ldepth);
 }
 
@@ -164,7 +164,7 @@ static void rebalance(offset_ptr<AVLtreeNode> t, offset_ptr<AVLtreeNode>* tree_a
         rotateRight(t, tree_addr);
     }
     
-    if (!!t && !!t->parent)
+    if (t && t->parent)
         rebalance(t->parent, tree_addr);
 }
 
@@ -178,9 +178,9 @@ static void __addToTree(offset_ptr<AVLtreeNode> i, offset_ptr<AVLtreeNode> *tree
                         int (*cmp)(void*,void*), void*(*getKey)(void*))
 {
         
-    if (!!t) {
+    if (t) {
         if ((*cmp)((*getKey)((void*)i.get()), (*getKey)((void*)t.get())) < 0) {
-            if (!!t->left)
+            if (t->left)
                 __addToTree(i, tree_addr, t->left, cmp, getKey);
             else {
                 t->left=i;
@@ -189,7 +189,7 @@ static void __addToTree(offset_ptr<AVLtreeNode> i, offset_ptr<AVLtreeNode> *tree
                 rebalance(i, tree_addr);
             }
         } else {
-            if (!!t->right)
+            if (t->right)
                 __addToTree(i, tree_addr, t->right, cmp, getKey);
             else {
                 t->right = i;
@@ -225,18 +225,18 @@ void AVLaddToTree(AVLtreeNode* i, offset_ptr<AVLtreeNode>* tree_addr,
 void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
     offset_ptr<AVLtreeNode> moved = t->parent;
     offset_ptr<AVLtreeNode> s;
-    if (!!t->left) {
-        if (!!t->right) {
+    if (t->left) {
+        if (t->right) {
             /* there are two subtrees. */
 
             if (t->left->depth >= t->right->depth) {
                 /* tree is left-heavy (or balanced) */
                 s = t->left->right;
-                if (!!s) {
-                    while (!!s->right) s=s->right;
+                if (s) {
+                    while (s->right) s=s->right;
                     moved = s->parent;
                     s->parent->right=s->left;
-                    if (!!s->left) {
+                    if (s->left) {
                         s->left->parent=s->parent;
                     }
                     s->left=t->left;
@@ -254,11 +254,11 @@ void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
             } else {
                 /* tree is right-heavy */
                 s = t->right->left;
-                if (!!s) {
-                    while (!!s->left) s=s->left;
+                if (s) {
+                    while (s->left) s=s->left;
                     moved = s->parent;
                     s->parent->left=s->right;
-                    if (!!s->right) {
+                    if (s->right) {
                         s->right->parent=s->parent;
                     }
                     s->right=t->right;
@@ -278,7 +278,7 @@ void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
             /* left subtree only */
             newSubTree(t->parent, tree_addr,t,t->left);
         }
-    } else if (!!t->right) {
+    } else if (t->right) {
         /* right subtree only */
         newSubTree(t->parent, tree_addr,t,t->right);
     
@@ -286,7 +286,7 @@ void AVLremoveFromTree(AVLtreeNode* t, offset_ptr<AVLtreeNode>* tree_addr) {
         /* no subtrees */
         newSubTree(t->parent, tree_addr,t,NULL);
     }
-    if(!!moved) {
+    if(moved) {
         setDepth(moved);
         rebalance(moved, tree_addr);
     }
@@ -300,12 +300,12 @@ AVLtreeNode* AVLsearch(AVLtreeNode *t, void* key, int (*cmp)(void*,void*), void*
     if ((x = (*cmp)((*getKey)((void*)t),key)) == 0) {
         return t;
     } else if (x < 0) {
-        if (!!t->right)
+        if (t->right)
             return AVLsearch(t->right.get(), key, cmp, getKey);
         else
             return NULL;
     } else {
-        if (!!t->left)
+        if (t->left)
             return AVLsearch(t->left.get(), key, cmp, getKey);
         else
             return NULL;
@@ -321,12 +321,12 @@ AVLtreeNode* AVLsearch(AVLtreeNode *t, void* key)
     if ((x = t->compareToKey(key)) == 0) {
         return t;
     } else if (x < 0) {
-        if (!!t->right)
+        if (t->right)
             return AVLsearch(t->right.get(), key);
         else
             return NULL;
     } else {
-        if (!!t->left)
+        if (t->left)
             return AVLsearch(t->left.get(), key);
         else
             return NULL;
@@ -337,7 +337,7 @@ AVLtreeNode* AVLsearch(AVLtreeNode *t, void* key)
 
 
 static long treesize(offset_ptr<AVLtreeNode> t) {
-    return (1 + (!!t->left? treesize(t->left) : 0) + (!!t->right? treesize(t->right) : 0));
+    return (1 + (t->left? treesize(t->left) : 0) + (t->right? treesize(t->right) : 0));
     
     
 }
