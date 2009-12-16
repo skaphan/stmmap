@@ -79,7 +79,9 @@
  */
 
 #ifdef __APPLE__
+#ifndef PRIVATE_MAPPING_IS_PRIVATE
 #define PRIVATE_MAPPING_IS_PRIVATE
+#endif
 #endif
 
 // On some systems this will be SIGSEGV.  On MacOS, for example, it must be SIGBUS.
