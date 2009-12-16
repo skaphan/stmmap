@@ -25,30 +25,57 @@
 INSTALLATION
 ============
 
-To use this package you only need to compile and link stm.c and
-atomic-compat.c.  All visible APIs are exposed through stm.h.
+There is a Makefile that builds two tests: stmtest1 and stmtest2.  These are, respectively,
+a single-threaded and a multi-threading-capable version of the same thing.
+They run the test case in example.c, which is just a test, not part of the core package.
+Example.c also shows how to set up and call the stm package.  
+
+There are two libraries used to compile these tests.  You should use one or the other of them,
+not both. They are libstm.a and libstm-th.a.   The first is a single-threaded version that
+is for use sharing memory transactionally between processes.  The second, in addition to
+supporting single-threaded, multi-process work, also supports multiple-threads in a process.
+libstm-th.a needs some C++ support, so if you don't want any C++ in your program, you must
+stick to libstm.a.   Note, though, that the C++ doesn't escape stmmap's internals, so though it
+requires a bit of C++ at compile-time, no APIs are affected and no runtime libraries are required.
+
+Here is a manifest of the files and what they do:
+
+Essentials:
+
+stm.[ch]	      	  core STM functionality
+atomic-compat.[ch]	  atomic operations needed by stm.c.  Currently uses atomic-builtins.
+
+Support: (you can use stm.c without any of this if you want)
+
+stmalloc.[ch]		  memory allocator suitable for stmmap's shared segments.
+segalloc.[ch]		  C implementation of low level memory allocator used by stmalloc.c
+segalloc.{cpp,h}	  C++ implementation of low level memory allocator used by stmalloc.c
+AVLtree.[ch]		  C AVL tree implementation that supports memory allocator
+AVLtree.{cpp,hpp}	  C++ AVL tree implementation that supports memory allocator
+
+Tests & Configuration:
+
+Makefile
+determine-mmap-behavior.c	The Makefile uses this
+determine-signal-name.c		"   	"     "	   "
+
+To use stmmap-th.a and the C++ versions of the memory allocator, you will need the Boost C++
+library available at www.boost.org.  The only thing from there that is used is offset_ptr, and
+it is self-contained as a header file.  No libraries are required.  Offset_ptr provides
+position-independent "smart pointers" that make it possible to have the same object mapped
+into the address space in multiple locations and still have its pointers work correctly.  This
+is used in the multi-threading version of stmmap.  It is only used in the memory allocator.
+
+The header files your program will need are stm.h and stmalloc.h.  Stmalloc.h is only needed if you
+are using the included memory allocator.
 
 You may need to port atomic-compat.[ch] to your OS environment, as different
 OS versions have different atomic primitives. (Please send me the changes!)
-
-There is also a memory allocator for your shared segments, though use of
-this is not required to use the basic STM functionality.  For the single-threaded
-version of stmmap, you need to compile and link AVLtree.c, segalloc.c,
-and stmalloc.c.  Each one comes with a corresponding .h file.  The visible API 
-for the allocator is in stmalloc.h.
-
-The multi-threaded version of the allocator uses AVLtree.{cpp,hpp}, segalloc.{cpp,h}
-and one file set, stmalloc.c, which is the same as for the single-threaded version.
-Note the segalloc.cpp and segalloc.c both use the same header file segalloc.h.
-To compile the multi-threaded version of stmmap, you will also need the Boost C++ library,
-which you can find at http://www.boost.org/ .  This provides a smart pointer class
-offset_ptr which you will probably also need (or something like it) in your
-shared data structures if you use stmmap.  This is only necessary at compile-time.
-Everything that is needed is in the included header files.
+Right now it uses the atomic builtins as specified by Intel and implemented in gcc.
+Or you can use the set that Apple provides.
 
 Example.c gives a very simple example of how to use this package.  In fact,
 this is what I used to debug it.
-
 
 
 THEORY OF OPERATION
@@ -192,7 +219,7 @@ actually private on Mac OSX even when only reading a privately mapped file.
 
 Clearly it would be better if there was explicit control of this issue, with a way
 of explicitly requesting either copy-on-write behavior or true private mapping.  If
-the system you are compiling on provides true private mapping, you may define
+the system you are compiling on provides true private mapping, you must define
 the symbol PRIVATE_MAPPING_IS_PRIVATE when compiling stm.c.  Otherwise, when pages
 are mapped PRIVATE as they are accessed in a transaction, they immediately perform
 a write of some of their own contents into themselves, invoking copy-on-write behavior.
