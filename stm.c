@@ -90,9 +90,6 @@
 
 
 
-// This is here for experimental purposes.  You probably do not want to define it -
-// It appears to negatively affect performance.
-#undef PER_PAGE_MMAPS
 
 #define MAX_ACTIVE_TRANSACTIONS 100
 
@@ -578,21 +575,7 @@ static void abort_transaction_on_segment(shared_segment *seg) {
             // associated with another transaction.
             
             page_table_elt->current_transaction = 0;
-        }
-        
-
-#ifdef PER_PAGE_MMAPS
-        if (seg->default_prot_flags == PROT_NONE) {
-            status = (void*)(long)mprotect(sl->original_page_va, seg->page_size, PROT_NONE);
-        } else   
-        {    
-            status = mmap(sl->original_page_va, seg->page_size, seg->default_prot_flags, MAP_FIXED|MAP_SHARED, seg->fd, 
-                          (off_t)(sl->original_page_va - seg->shared_base_va));
-        }
-        if (status == (void*)-1)
-            perror("abort_transaction_on_segment: mmap error");
-#endif
-    
+        }    
     }
     
     if (stm_verbose & 4)
@@ -602,7 +585,6 @@ static void abort_transaction_on_segment(shared_segment *seg) {
         
     // reprotect *all* pages with the default inter-transaction protection.
     
-#ifndef PER_PAGE_MMAPS
     
 #ifdef PRIVATE_MAPPING_IS_PRIVATE 
     if (seg->default_prot_flags == PROT_NONE) {
@@ -622,7 +604,6 @@ static void abort_transaction_on_segment(shared_segment *seg) {
     }
     if (status == (void*)-1)
         perror("abort_transaction_on_segment: mmap error");
-#endif
     
     seg->transaction_id = 0;    
             
@@ -1187,7 +1168,6 @@ static int write_locked_segment_pages(shared_segment *seg) {
     // Re-map shared.
         
 
-#ifndef PER_PAGE_MMAPS
     status = mmap(seg->shared_base_va, seg->shared_seg_size, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, seg->fd,
                   (off_t)0);
     if (status == (void*)-1) {
@@ -1196,7 +1176,6 @@ static int write_locked_segment_pages(shared_segment *seg) {
         set_stm_errno(STM_MMAP_ERROR);
         return -1;
     }
-#endif
     
     if (stm_verbose & 4)
         fprintf(stderr, "Transaction %d [", seg->transaction_id);
@@ -1213,26 +1192,12 @@ static int write_locked_segment_pages(shared_segment *seg) {
             if (stm_verbose & 4)
                 fprintf(stderr, " %lx", page_num);
 
-#ifdef PER_PAGE_MMAPS
-            status = mmap(sl->original_page_va, seg->page_size, PROT_READ|PROT_WRITE, MAP_FIXED|MAP_SHARED, seg->fd,
-                          (off_t)(sl->original_page_va - seg->shared_base_va));
-            if (status == (void*)-1) {
-                if (stm_verbose & 1)
-                    perror("write_locked_pages: mmap error");
-                set_stm_errno(STM_MMAP_ERROR);
-                return -1;
-            }
-#endif
             page_table_elt->completed_transaction = seg->transaction_id;
             
             // copy the temporarily saved, modified pages back into the right places
             //
             memcpy(sl->original_page_va, sl->original_page_snapshot, seg->page_size);
             
-#ifdef PER_PAGE_MMAPS
-            if (seg->default_prot_flags != (PROT_READ|PROT_WRITE))
-                mprotect(sl->original_page_va, seg->page_size, seg->default_prot_flags);
-#endif
         }
                 
         if (page_table_elt->current_transaction == seg->transaction_id) {
@@ -1250,7 +1215,6 @@ static int write_locked_segment_pages(shared_segment *seg) {
 
     // re-protect the segment to be whatever it is supposed to be between transactions
 
-#ifndef PER_PAGE_MMAPS
     
 #ifdef PRIVATE_MAPPING_IS_PRIVATE    
     if (seg->default_prot_flags != (PROT_READ|PROT_WRITE))
@@ -1269,7 +1233,6 @@ static int write_locked_segment_pages(shared_segment *seg) {
         set_stm_errno(STM_MMAP_ERROR);
         result = -1;
     }
-#endif      // ifndef PER_PAGE_MMAPS
     
     free_snapshot_list(seg);
     
