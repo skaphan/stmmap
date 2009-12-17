@@ -54,9 +54,6 @@ stmtest1: example.o $(NLIB)
 stmtest2: example.th.o $(THLIB)
 	$(CPP) -o $@ example.th.o $(LIBDIR) $(THLIBS)
 
-#stmtest2: $(OBJ) $(THOBJ) example.th.o
-#	$(CPP) -o $@ example.th.o $(OBJ) $(THOBJ) $(LIBS)
-
 %.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
