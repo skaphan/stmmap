@@ -56,8 +56,7 @@ AVLtree.{cpp,hpp}	  C++ AVL tree implementation that supports memory allocator
 Tests & Configuration:
 
 Makefile
-determine-mmap-behavior.c	The Makefile uses this
-determine-signal-name.c		"   	"     "	   "
+autoconfigure.c		The Makefile uses this
 
 To use stmmap-th.a and the C++ versions of the memory allocator, you will need the Boost C++
 library available at www.boost.org.  The only thing from there that is used is offset_ptr, and

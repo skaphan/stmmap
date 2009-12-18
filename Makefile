@@ -8,10 +8,7 @@ CPP=g++
 
 THREADFLAGS = -DTHREADS
 
-SIGDEF = $(shell ./determine-signal-name)
-MAPDEF = $(shell ./determine-mmap-behavior)
-
-CFLAGS = $(SIGDEF) $(MAPDEF)
+CFLAGS = $(shell ./autoconfigure)
 
 CPLUSPLUSFLAGS = $(CFLAGS) -I$(IDIR)
 
@@ -35,7 +32,7 @@ NOBJ = AVLtree.o segalloc.o example.o
 
 THOBJ = segalloc.th.o AVLtree.th.o example.th.o 
 
-TARGETS = determine-signal-name determine-mmap-behavior stmtest1 stmtest2
+TARGETS = autoconfigure stmtest1 stmtest2
 
 all: $(TARGETS)
 
