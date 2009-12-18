@@ -41,14 +41,14 @@ all: $(TARGETS)
 # in the shared segment.  Uses pthreads library for thread local storage
 # which is the same in both single- and multi-threaded versions.
 #
-stmtest1: example.o $(NLIB)
+stmtest1: autoconfigure example.o $(NLIB)
 	$(CC) -o $@ example.o $(LIBDIR) $(NLIBS)
 
 
 # this is a multi-threading test program that uses position-independent
 # relative pointers in the shared segment.
 #
-stmtest2: example.th.o $(THLIB)
+stmtest2: autoconfigure example.th.o $(THLIB)
 	$(CPP) -o $@ example.th.o $(LIBDIR) $(THLIBS)
 
 %.o: %.c Makefile
@@ -64,10 +64,10 @@ stmtest2: example.th.o $(THLIB)
 %: %.c
 	$(CC) -o $@ $@.c
 
-$(NLIB): $(NLIB)($(OBJ) $(NOBJ))
+$(NLIB): autoconfigure $(NLIB)($(OBJ) $(NOBJ))
 	ranlib $(NLIB)
 
-$(THLIB): $(THLIB)($(OBJ) $(THOBJ))
+$(THLIB): autoconfigure $(THLIB)($(OBJ) $(THOBJ))
 	ranlib $(THLIB)
 
 .PHONY: clean
