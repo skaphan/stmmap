@@ -25,18 +25,28 @@
 INSTALLATION
 ============
 
-There is a Makefile that builds two tests: stmtest1 and stmtest2.  These are, respectively,
-a single-threaded and a multi-threading-capable version of the same thing.
-They run the test case in example.c, which is just a test, not part of the core package.
-Example.c also shows how to set up and call the stm package.  
+The primary product here is a library you can use to get Software Transactional Memory in your
+C and C++ programs.  Actually it is two libraries, the difference being in the optional
+memory allocator that is included.  One of them, libstm.a, supports transactions in only
+one thread per process. Processes can share memory, with transactions,  between them.
+The other one, libstm-th.a, supports transactions in many threads per process (and still
+allows multiple processes too).  If you want to use regular pointers in the objects in shared
+memory, you should stick to libstm.a, because you can control the location where the one
+and only shared memory region will live.   If you use libstm-th.a, the shared memory region
+will be mapped at a different address for each thread doing transactions.   So you will either
+need to avoid storing pointers in shared objects, or you will need to use a smart pointer
+class like offset_ptr, as supplied by the Boost C++ libraries (www.boost.org).  Libstm-th.a 
+makes use of offset_ptr.  Because of offset_ptr, libstm-th.a needs to use some C++,
+so if you don't want any C++ in your program, you must stick to libstm.a.
+Note, though, that the C++ doesn't escape stmmap's internals, so though it requires
+a bit of C++ at compile-time, no APIs are affected and no runtime libraries are required.
 
-There are two libraries used to compile these tests.  You should use one or the other of them,
-not both. They are libstm.a and libstm-th.a.   The first is a single-threaded version that
-is for use sharing memory transactionally between processes.  The second, in addition to
-supporting single-threaded, multi-process work, also supports multiple-threads in a process.
-libstm-th.a needs some C++ support, so if you don't want any C++ in your program, you must
-stick to libstm.a.   Note, though, that the C++ doesn't escape stmmap's internals, so though it
-requires a bit of C++ at compile-time, no APIs are affected and no runtime libraries are required.
+There is a Makefile that builds the libraries and two tests: stmtest1 and stmtest2.
+these are, respectively,a single-threaded and a multi-threading-capable version of the same thing.
+They run the test case in example.c, which is just a test, not part of the core package.
+Example.c also shows how to set up and call the stm package.  To test stmtest1, you need to
+run multiple copies of it at the same time, in different processes.
+
 
 Here is a manifest of the files and what they do:
 
@@ -91,7 +101,7 @@ to any processes that access that segment of mapped memory.
 When a transaction is in progress, the shared area is access-protected, and the first
 access by the process performing the transaction to any page is trapped.  Other
 processes are not affected.  A signal handler keeps track of the accessed pages.
-Upon first access in a transaction, each accessed page is remapped "private" so that
+Upon first access in a transaction, a private copy of each page is made so that
 any modifications are not visible to any other process.  If, on first access to a page
 within a transaction, it can be determined that another process has modified that page
 since the transaction started, the transaction is aborted.  When a transaction is
@@ -163,10 +173,10 @@ contents of shared, mapped files are immediately visible to all processes that
 have them mapped shared.  This could possibly fail on some systems without
 sufficient cache coherency, for example.  This package does *not* depend on
 private mappings being kept up to date with the current contents of a file.
-It does depend on private pages not being visible to other processes, and it
-uses "copy-on-write" semantics of private mapping to ensure that private pages
-are private and will not be arbitrarily overwritten with data from another
-process.
+This occurs in some OS versions but not others. It does depend on writes into
+private pages not being visible to other mappings, and it uses "copy-on-write"
+semantics of private mapping to ensure that private pagesare private and will
+not be arbitrarily overwritten with data from another process or thread.
 
 Warning: since transactions will be retried until they succeed, any variables
 outside the explicitly shared memory segment(s) that are referenced within a
@@ -192,7 +202,7 @@ stmmap depends heavily on mmap().  Some features of mmap() are implemented diffe
 on different systems.  Of particular concern is the behavior of private mapping, which
 you get with the MAP_PRIVATE flag.  stmmap uses this when a transaction accesses
 pages in memory.  Some systems treat MAP_PRIVATE as a true private mapping, whether
-reading or writing.  Some, on the other hand, treat the mapping as if it were shared
+reading or writing.  Most, on the other hand, treat the mapping as if it were shared
 until there is a write, at which time they make a private copy.  Here, for example,
 is a quote from http://docs.hp.com/en/5992-3373/ch10s03.html:
 
